@@ -530,7 +530,7 @@ function nav(pg, el) {
 /* ===== SERVER STATUS ===== */
 (function () {
   const d = $('srvDot'), t = $('srvTxt');
-  fetch('/api/resolve?url=', { method: 'GET' }).then(function () {
+  fetch('https://raka-sfl.vercel.app/api/resolve?url=', { method: 'GET' }).then(function () {
     d.classList.add('ok'); t.textContent = 'Online';
   }).catch(function () {
     d.classList.add('bad'); t.textContent = 'Offline';
@@ -880,7 +880,7 @@ function setCache(src, d) {
 }
 /* ===== BYPASS ===== */
 async function bypassOne(u) {
-  const r = await fetch('/api/resolve?url=' + encodeURIComponent(u));
+  const r = await fetch('https://raka-sfl.vercel.app/api/resolve?url=' + encodeURIComponent(u));
   return await r.json();
 }
 async function runBypass(list) {
@@ -906,13 +906,19 @@ async function runBypass(list) {
         $('homeRes').appendChild(resCard(u, d, false));
         buzz(); autoCopyTxt(show);
       } else {
-        lastFail = { src: u, error: d.error || 'Gagal' };
+        const errMsg = d.error || d.reason || 'Gagal';
+        lastFail = { src: u, error: errMsg };
         renderChips();
         const e = document.createElement('div');
         e.className = 'card err-card';
-        e.innerHTML = '<div class="err-msg">' + ic('alert', 18) + '<span>' +
-          esc(d.error || 'Gagal') + '</span></div>' +
-          '<button class="btn primary">' + ic('refresh', 17) + 'Coba Lagi</button>';
+        let errHtml = '<div class="err-msg">' + ic('alert', 18) + '<span>' +
+          esc(errMsg) + '</span></div>';
+        if (d.needManual && d.manualUrl) {
+          errHtml += '<div style="font-size:13px;opacity:.85;margin:6px 0">Provider: ' + esc(d.provider || '') + ' — Link ini butuh verifikasi manual karena Cloudflare blokir server. Buka di browser, selesaikan verifikasinya, link asli akan kebuka.</div>' +
+            '<a class="btn primary" href="' + esc(d.manualUrl) + '" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;margin-bottom:8px">' + ic('ext', 17) + 'Buka Manual di Browser</a>';
+        }
+        errHtml += '<button class="btn primary">' + ic('refresh', 17) + 'Coba Lagi</button>';
+        e.innerHTML = errHtml;
         e.querySelector('button').onclick = () => runBypass([u]);
         $('homeRes').appendChild(e);
       }
@@ -987,7 +993,7 @@ async function askAI(text) {
       const s = JSON.parse(localStorage.getItem('rb_stat') || '{"total":0,"ok":0}');
       statTxt = 'Total bypass: ' + s.total + ', berhasil: ' + s.ok;
     } catch (e) {}
-    const r = await fetch('/api/ai', {
+    const r = await fetch('https://raka-sfl.vercel.app/api/ai', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages: chatHist.slice(-10), context: ctx, stats: statTxt }),

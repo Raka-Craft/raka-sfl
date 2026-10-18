@@ -1055,6 +1055,7 @@ async function resolveUrl(raw, deadline, isManualContinue) {
   if (provider.fn === 'manual') {
     return { ok: false, needManual: true, provider: provider.name, manualUrl: first.url,
       reason: provider.reason || 'Link ini butuh verifikasi CAPTCHA manual.',
+      error: provider.reason || 'Link ini butuh verifikasi CAPTCHA manual.',
       chain: first.chain, ms: Date.now() - t0 };
   }
 
@@ -1084,6 +1085,7 @@ async function resolveUrl(raw, deadline, isManualContinue) {
     if (r && r.destination) return { ok: true, provider: provider.name, destination: r.destination, chain: [...chain, r.destination], ms: Date.now() - t0, method: 'form-post' };
     return { ok: false, needManual: true, provider: provider.name, manualUrl: pageUrl,
       reason: 'ShrinkMe diblokir Cloudflare dari server. Selesaikan manual di browser kamu.',
+      error: 'ShrinkMe diblokir Cloudflare dari server. Selesaikan manual di browser kamu.',
       chain, ms: Date.now() - t0 };
   }
   // v14: SubUnlock (subscribe to unlock) - simulasi klik task
@@ -1123,6 +1125,7 @@ async function resolveUrl(raw, deadline, isManualContinue) {
     // Kalau tidak bisa otomatis, jelaskan dengan jelas
     return { ok: false, needManual: true, provider: provider.name, manualUrl: pageUrl,
       reason: 'Link ini tipe "Subscribe to Unlock" - kamu harus subscribe channel YouTube-nya dulu di browser, baru link download-nya kebuka.',
+      error: 'Link ini tipe "Subscribe to Unlock" - kamu harus subscribe channel YouTube-nya dulu di browser, baru link download-nya kebuka.',
       chain, ms: Date.now() - t0 };
   }
 
@@ -1199,6 +1202,7 @@ async function resolveUrl(raw, deadline, isManualContinue) {
     if (captchaResult && captchaResult.cloudflare) {
       return { ok: false, needManual: true, provider: provider.name, manualUrl: pageUrl,
         reason: 'Link ini dilindungi Cloudflare. Selesaikan verifikasinya manual di browser.',
+        error: 'Link ini dilindungi Cloudflare. Selesaikan verifikasinya manual di browser.',
         chain, ms: Date.now() - t0 };
     }
     if (captchaResult && captchaResult.solved && captchaResult.destination) {
