@@ -164,6 +164,8 @@ function base64Candidates(html) {
 const AD_DOMAINS = ['google', 'facebook', 'doubleclick', 'googlesyndication', 'analytics', 'adsystem', 'adservice', 'taboola', 'outbrain', 'mgid', 'revcontent', 'popads', 'popcash', 'adcash', 'propeller', 'exoclick', 'adnxs', 'criteo', 'hotjar', 'cloudflare', 'hcaptcha', 'recaptcha', 'gstatic', 'schema.org', 'w3.org', 'youtube.com', 'youtu.be'];
 
 const FILE_HOSTS=['mediafire.com','apkadmin.com','drive.google.com','github.com'];
+/* v10: MediaFire prioritas utama */
+const MEDIAFIRE_FIRST = true;
 
 /* Domain iklan/popunder sering pakai nama acak panjang (3+ kata digabung), mis. balconypomegranateluckily.com */
 function isSuspiciousAdHost(host) {
@@ -188,7 +190,189 @@ function genericCandidates(html, selfHost) {
     if (/\.(png|jpe?g|gif|webp|svg|ico|css|js|woff2?|ttf)(\?|$)/i.test(v)) continue;
     found.set(v, (found.get(v) || 0) + 1);
   }
-  const ranked=[...found.entries()].sort((x,y)=>{const xh=hostOf(x[0]),yh=hostOf(y[0]);const xf=FILE_HOSTS.some(f=>xh===f||xh.endsWith('.'+f))?1:0;const yf=FILE_HOSTS.some(f=>yh===f||yh.endsWith('.'+f))?1:0;if(xf!==yf)return yf-xf;return y[1]-x[1];});return ranked.map(e=>e[0]);
+  const score = (url) => {
+    const h = hostOf(url);
+    // v10: MediaFire skor tertinggi
+    if (h === 'mediafire.com' || h.endsWith('.mediafire.com')) return 100;
+    if (FILE_HOSTS.some(f => h === f || h.endsWith('.' + f))) return 50;
+    // URL dengan ekstensi file download
+    if (/\.(zip|rar|7z|apk|xapk|pdf|mp4|mkv|mp3)$/i.test(url)) return 30;
+    return 0;
+  };
+  const ranked=[...found.entries()].sort((x,y)=>{
+    const sx = score(x[0]), sy = score(y[0]);
+    if (sx !== sy) return sy - sx;
+    return y[1] - x[1];
+  });
+  return ranked.map(e=>e[0]);
+}
+
+
+/* ============================================================
+   v10 AUTO-LEARNING: sistem mempelajari pola bypass domain baru
+   Cara kerja:
+   1. Coba pola umum (tombol continue, form timer, JS reveal, dll)
+   2. Kalau berhasil, ingat polanya untuk domain itu
+   3. Request berikutnya untuk domain sama langsung pakai pola yang dipelajari
+   ============================================================ */
+const learnedPatterns = {}; // domain -> { method, pattern }
+
+function learnPattern(domain, method, detail) {
+  learnedPatterns[domain] = { method, detail, learnedAt: Date.now() };
+}
+
+function getLearnedPattern(domain) {
+  return learnedPatterns[domain] || null;
+}
+
+/* Pola 1: Cari tombol/link "Continue", "Skip Ad", "Lanjutkan" */
+function findContinueLinks(html, selfHost) {
+  const results = [];
+  // <a> dengan teks continue/skip/lanjut
+  const re1 = /<a[^>]+href=["']([^"']+)["'][^>]*>([^<]{0,80})<\/a>/gi;
+  let m;
+  while ((m = re1.exec(html)) !== null) {
+    const text = (m[2] || '').toLowerCase();
+    if (/continue|skip|lanjut|lewati|proceed|klik|click here|download/i.test(text)) {
+      const u = validHttpUrl(m[1]);
+      if (u && hostOf(u) !== selfHost) results.push({ url: u, method: 'continue-button', text: m[2].trim().slice(0, 40) });
+    }
+  }
+  return results;
+}
+
+/* Pola 2: Cari form yang submit ke URL lain (dengan/tanpa timer) */
+function findFormActions(html, pageUrl, selfHost) {
+  const results = [];
+  const re = /<form[^>]+action=["']([^"']+)["'][^>]*>/gi;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    try {
+      const u = new URL(m[1], pageUrl).href;
+      if (hostOf(u) !== selfHost || m[1].includes('download')) {
+        results.push({ url: validHttpUrl(u), method: 'form-submit' });
+      }
+    } catch (e) {}
+  }
+  return results.filter(r => r.url);
+}
+
+/* Pola 3: Cari JavaScript timer yang reveal link (setTimeout -> location) */
+function findTimerReveals(html) {
+  const results = [];
+  // setTimeout(function(){ window.location = "URL" }, 5000)
+  const patterns = [
+    /setTimeout\s*\(\s*function\s*\(\)\s*\{[^}]*?(?:window\.)?location(?:\.href)?\s*=\s*["']([^"']+)["']/gi,
+    /setTimeout\s*\(\s*["'](?:window\.)?location(?:\.href)?\s*=\s*['"]?([^"';]+)/gi,
+    /countdown[^}]{0,200}?(?:window\.)?location(?:\.href)?\s*=\s*["']([^"']+)["']/gi,
+  ];
+  for (const re of patterns) {
+    let m;
+    while ((m = re.exec(html)) !== null) {
+      const u = validHttpUrl(m[1]);
+      if (u) results.push({ url: u, method: 'timer-reveal' });
+    }
+  }
+  return results;
+}
+
+/* Pola 4: Cari link download langsung (ekstensi file) */
+function findDirectDownloads(html, selfHost) {
+  const results = [];
+  const re = /https?:\/\/[^\s"'<>\\]+\.(zip|rar|7z|apk|xapk|pdf|mp4|mkv|mp3|exe|dmg)(\?[^\s"'<>]*)?/gi;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    const u = validHttpUrl(m[0]);
+    if (u) results.push({ url: u, method: 'direct-download' });
+  }
+  return results;
+}
+
+/* Pola 5: Cari data attributes yang berisi URL (data-url, data-href, data-link) */
+function findDataUrls(html) {
+  const results = [];
+  const re = /data-(?:url|href|link|download)=["']([^"']+)["']/gi;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    const u = validHttpUrl(m[1]);
+    if (u) results.push({ url: u, method: 'data-attribute' });
+  }
+  return results;
+}
+
+/* Fungsi utama auto-learning */
+async function autoLearnBypass(pageUrl, html, deadline, jar) {
+  const domain = hostOf(pageUrl);
+  const selfHost = domain;
+
+  // Cek apakah sudah ada pola yang dipelajari untuk domain ini
+  const learned = getLearnedPattern(domain);
+  if (learned) {
+    // Coba pola yang sudah dipelajari dulu
+    const retry = await tryLearnedPattern(pageUrl, html, learned, deadline, jar);
+    if (retry) return { ...retry, learned: true, pattern: learned.method };
+  }
+
+  // Urutan pola dari yang paling mungkin berhasil
+  const strategies = [
+    { name: 'direct-download', fn: () => findDirectDownloads(html, selfHost) },
+    { name: 'continue-button', fn: () => findContinueLinks(html, selfHost) },
+    { name: 'timer-reveal', fn: () => findTimerReveals(html) },
+    { name: 'form-submit', fn: () => findFormActions(html, pageUrl, selfHost) },
+    { name: 'data-attribute', fn: () => findDataUrls(html) },
+  ];
+
+  for (const strat of strategies) {
+    if (Date.now() > deadline - 3000) break;
+    try {
+      const candidates = strat.fn();
+      for (const cand of candidates.slice(0, 3)) {
+        if (Date.now() > deadline - 2000) break;
+        // Verifikasi: coba fetch URL kandidat
+        try {
+          const test = await fetchT(cand.url, { redirect: 'manual', headers: baseHeaders(jar) }, 5000);
+          const loc = test.headers.get('location');
+          try { await test.arrayBuffer().catch(() => {}); } catch (e) {}
+          // Kalau redirect ke file host atau return file, anggap berhasil
+          const finalUrl = loc ? new URL(loc, cand.url).href : cand.url;
+          const fh = hostOf(finalUrl);
+          const isFile = FILE_HOSTS.some(f => fh === f || fh.endsWith('.' + f)) ||
+                         /\.(zip|rar|7z|apk|xapk|pdf|mp4|mkv|mp3)$/i.test(finalUrl);
+          if (isFile || test.status === 200) {
+            // PELAJARI: ingat pola ini untuk domain ini
+            learnPattern(domain, strat.name, cand.method);
+            return {
+              destination: finalUrl,
+              method: 'auto-learned:' + strat.name,
+              learned: true,
+              pattern: strat.name,
+              detail: cand.text || cand.method,
+            };
+          }
+        } catch (e) { /* lanjut ke kandidat berikutnya */ }
+      }
+    } catch (e) { /* lanjut ke strategi berikutnya */ }
+  }
+  return null;
+}
+
+/* Coba pola yang sudah dipelajari */
+async function tryLearnedPattern(pageUrl, html, learned, deadline, jar) {
+  const selfHost = hostOf(pageUrl);
+  const strategies = {
+    'direct-download': () => findDirectDownloads(html, selfHost),
+    'continue-button': () => findContinueLinks(html, selfHost),
+    'timer-reveal': () => findTimerReveals(html),
+    'form-submit': () => findFormActions(html, pageUrl, selfHost),
+    'data-attribute': () => findDataUrls(html),
+  };
+  const fn = strategies[learned.method];
+  if (!fn) return null;
+  const candidates = fn();
+  if (candidates.length > 0) {
+    return { destination: candidates[0].url, method: 'learned:' + learned.method };
+  }
+  return null;
 }
 
 /* ---------- provider flows ---------- */
@@ -541,6 +725,16 @@ async function resolveUrl(raw, deadline, isManualContinue) {
   if (provider.fn === 'linkvertise') {
     const r = await flowLinkvertise(pageUrl, deadline);
     if (r) return { ok: true, provider: provider.name, destination: r.destination, chain: [...chain, r.destination], ms: Date.now() - t0, method: 'api' };
+  }
+
+  // v10 AUTO-LEARNING: untuk provider tidak dikenal / generic, pelajari polanya
+  if (provider.fn === 'generic' || provider.name === 'Otomatis') {
+    const learned = await autoLearnBypass(pageUrl, html, deadline, jar);
+    if (learned && learned.destination) {
+      return { ok: true, provider: provider.name + ' (Auto-Learned)', destination: learned.destination,
+        chain: [...chain, learned.destination], ms: Date.now() - t0,
+        method: learned.method, learnedPattern: learned.pattern };
+    }
   }
 
   // 3-6) loop: ikuti redirect JS satu-host (mis. sub4unlock S -> LP.php), lalu ekstraksi

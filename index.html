@@ -787,10 +787,7 @@ function setCache(src, d) {
 }
 /* ===== BYPASS ===== */
 async function bypassOne(u) {
-  const h = (u.match(/https?:\/\/([^\/]+)/) || [])[1] || '';
-  const isSub = h.indexOf('sub4unlock') >= 0 || h.indexOf('sub2unlock') >= 0;
-  const ep = isSub ? '/api/subunlock' : '/api/resolve';
-  const r = await fetch(ep + '?url=' + encodeURIComponent(u));
+  const r = await fetch('/api/resolve?url=' + encodeURIComponent(u));
   return await r.json();
 }
 async function runBypass(list) {
