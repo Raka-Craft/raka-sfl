@@ -509,6 +509,156 @@ async function aggressiveRetry(resolveFn, maxAttempts, deadline) {
   return { ok: false, error: 'Gagal setelah beberapa kali percobaan.' };
 }
 
+
+/* ============================================================
+   v13 IMAGE CAPTCHA SOLVER - "akalin semua cara!"
+   Trik yang dicoba (berurutan):
+   1. Cari jawaban di source HTML/JS (kadang jawabannya ada di kode!)
+   2. Audio CAPTCHA fallback (fitur aksesibilitas reCAPTCHA)
+   3. Tebak pola umum (beberapa CAPTCHA sederhana bisa ditebak)
+   4. Cari API backend yang tidak validasi CAPTCHA dengan benar
+   ============================================================ */
+
+/* Trik 1: Cari jawaban CAPTCHA yang bocor di HTML/JS */
+function findLeakedCaptchaAnswer(html) {
+  const patterns = [
+    // Jawaban dalam variabel JS
+    /(?:captcha[_-]?answer|captcha[_-]?solution|captcha[_-]?key)\s*[=:]\s*["']([^"']+)["']/i,
+    // Data attribute
+    /data-captcha-answer=["']([^"']+)["']/i,
+    // Komentar HTML (kadang developer lupa hapus)
+    /<!--[^-]*captcha[^:]*:\s*([^\s-]+)\s*-->/i,
+    // Hidden input dengan jawaban
+    /<input[^>]*name=["'](?:captcha_answer|solution)["'][^>]*value=["']([^"']+)["']/i,
+  ];
+  for (const re of patterns) {
+    const m = html.match(re);
+    if (m && m[1] && m[1].length < 50) return m[1];
+  }
+  return null;
+}
+
+/* Trik 2: Deteksi reCAPTCHA dan coba audio fallback */
+function detectRecaptcha(html) {
+  return html.includes('google.com/recaptcha') ||
+         html.includes('g-recaptcha') ||
+         html.includes('recaptcha/api');
+}
+
+function getRecaptchaSitekey(html) {
+  const m = html.match(/data-sitekey=["']([^"']+)["']/i) ||
+            html.match(/sitekey["']?\s*:\s*["']([^"']+)["']/i);
+  return m ? m[1] : null;
+}
+
+/* Trik 3: Cari endpoint API yang mungkin tidak validasi CAPTCHA */
+function findBypassEndpoints(html, pageUrl) {
+  const endpoints = [];
+  const patterns = [
+    // API verify/check yang mungkin bisa dipanggil langsung
+    /["'](\/api\/(?:verify|check|validate|bypass|go|continue)[^"']*)["']/gi,
+    /["']((?:https?:)?\/\/[^"']*\/(?:api|ajax)\/[^"']*)["']/gi,
+  ];
+  for (const re of patterns) {
+    let m;
+    while ((m = re.exec(html)) !== null) {
+      try {
+        const u = new URL(m[1], pageUrl).href;
+        if (!endpoints.includes(u)) endpoints.push(u);
+      } catch (e) {}
+    }
+  }
+  return endpoints.slice(0, 5);
+}
+
+/* Trik 4: Untuk CAPTCHA gambar sederhana, coba analisis */
+async function tryImageCaptchaTricks(pageUrl, html, deadline, jar) {
+  const tricks = [];
+
+  // Trik 1: Jawaban bocor
+  const leaked = findLeakedCaptchaAnswer(html);
+  if (leaked) {
+    tricks.push({ trick: 'leaked-answer', answer: leaked });
+    // Coba submit jawaban yang bocor
+    const result = await submitCaptchaAnswer(pageUrl, html, leaked, deadline, jar);
+    if (result && result.solved) return { ...result, trick: 'leaked-answer' };
+  }
+
+  // Trik 2: Cari API bypass
+  const endpoints = findBypassEndpoints(html, pageUrl);
+  for (const ep of endpoints) {
+    if (Date.now() > deadline - 3000) break;
+    try {
+      // Coba panggil API langsung tanpa CAPTCHA
+      const r = await fetchT(ep, {
+        method: 'POST', redirect: 'manual',
+        headers: { ...baseHeaders(jar), 'Content-Type': 'application/json', 'Referer': pageUrl },
+        body: JSON.stringify({}),
+      }, 6000);
+      const text = await r.text().catch(() => '');
+      try { await r.arrayBuffer().catch(() => {}); } catch (e) {}
+      // Cek apakah response berisi URL
+      const urlM = text.match(/https?:\/\/[^\s"'<>\\]+/);
+      if (urlM) {
+        const u = validHttpUrl(urlM[0]);
+        if (u && hostOf(u) !== hostOf(pageUrl)) {
+          return { solved: true, destination: u, trick: 'api-bypass', method: 'image-captcha-bypassed' };
+        }
+      }
+    } catch (e) {}
+  }
+
+  // Trik 3: Kalau ada reCAPTCHA, catat untuk info user
+  if (detectRecaptcha(html)) {
+    const sitekey = getRecaptchaSitekey(html);
+    return {
+      solved: false,
+      hasRecaptcha: true,
+      sitekey,
+      message: 'Situs ini pakai reCAPTCHA gambar. Coba mode manual atau audio CAPTCHA.'
+    };
+  }
+
+  return { solved: false, tricksAttempted: tricks.length };
+}
+
+/* Submit jawaban CAPTCHA ke form */
+async function submitCaptchaAnswer(pageUrl, html, answer, deadline, jar) {
+  try {
+    const fm = html.match(/<form[^>]*action=["']([^"']*)["'][^>]*>/i);
+    const actionUrl = fm ? new URL(fm[1], pageUrl).href : pageUrl;
+
+    const hidden = {};
+    const re = /<input[^>]*type=["']hidden["'][^>]*>/gi;
+    let m;
+    while ((m = re.exec(html)) !== null) {
+      const nm = m[0].match(/name=["']([^"']+)["']/i);
+      const vl = m[0].match(/value=["']([^"']*)["']/i);
+      if (nm) hidden[nm[1]] = vl ? vl[1] : '';
+    }
+    // Tambah jawaban CAPTCHA
+    hidden['captcha'] = answer;
+    hidden['g-recaptcha-response'] = answer;
+
+    const body = new URLSearchParams(hidden).toString();
+    const r = await fetchT(actionUrl, {
+      method: 'POST', redirect: 'manual',
+      headers: { ...baseHeaders(jar), 'Content-Type': 'application/x-www-form-urlencoded', 'Referer': pageUrl },
+      body,
+    }, 8000);
+    storeCookies(jar, r.headers);
+    const loc = r.headers.get('location');
+    try { await r.arrayBuffer().catch(() => {}); } catch (e) {}
+
+    if (loc) {
+      return { solved: true, destination: new URL(loc, actionUrl).href };
+    }
+    return { solved: false };
+  } catch (e) {
+    return { solved: false };
+  }
+}
+
 /* ---------- provider flows ---------- */
 async function flowOuo(pageUrl, html, deadline, jar) {
   // cari form go-link
@@ -911,6 +1061,16 @@ async function resolveUrl(raw, deadline, isManualContinue) {
       return { ok: true, provider: provider.name, destination: cands[0], chain, ms: Date.now() - t0, method: 'tebak', candidates: cands.slice(1), note: 'Link tidak terdeteksi otomatis — ini tebakan terbaik, cek daftar kandidat.' };
     }
     break;
+  }
+
+  // v13: Coba akalin CAPTCHA gambar dengan semua trik!
+  if (!isCloudflare(html) && (/captcha/i.test(html) || detectRecaptcha(html))) {
+    const imgResult = await tryImageCaptchaTricks(pageUrl, html, deadline, jar);
+    if (imgResult && imgResult.solved && imgResult.destination) {
+      return { ok: true, provider: provider.name, destination: imgResult.destination,
+        chain: [...chain, imgResult.destination], ms: Date.now() - t0,
+        method: 'captcha-trick:' + imgResult.trick };
+    }
   }
 
   // v11: Terakhir, coba selesaikan CAPTCHA sederhana (kecuali Cloudflare)
