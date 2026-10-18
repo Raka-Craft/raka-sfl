@@ -659,6 +659,75 @@ async function submitCaptchaAnswer(pageUrl, html, answer, deadline, jar) {
   }
 }
 
+
+/* ============================================================
+   v16 CLOUDFLARE BYPASS MAKSIMAL
+   Trik yang dicoba berurutan:
+   1. Google Translate proxy (IP Google dipercaya Cloudflare)
+   2. User-Agent mobile (kadang CF lebih longgar di mobile)
+   3. Header lengkap seperti browser asli
+   ============================================================ */
+const MOBILE_UA = 'Mozilla/5.0 (Linux; Android 10; Redmi Note 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36';
+
+async function tryCloudflareBypass(pageUrl, deadline, jar) {
+  const tricks = [];
+
+  // Trik 1: Google Translate proxy
+  try {
+    const u = new URL(pageUrl);
+    const gtHost = u.hostname.replace(/\./g, '-') + '.translate.goog';
+    const sep = u.search ? '&' : '?';
+    const gtUrl = 'https://' + gtHost + u.pathname + u.search + sep + '_x_tr_sl=en&_x_tr_tl=id&_x_tr_hl=id';
+    if (Date.now() < deadline - 5000) {
+      const r = await fetchT(gtUrl, { redirect: 'manual', headers: baseHeaders(jar) }, 10000);
+      const ct = (r.headers.get('content-type') || '').toLowerCase();
+      storeCookies(jar, r.headers);
+      if (ct.includes('html')) {
+        const html = await r.text().catch(() => '');
+        try { await r.arrayBuffer().catch(() => {}); } catch (e) {}
+        if (html && html.length > 1000 && !html.includes('Just a moment') && !html.includes('challenges.cloudflare')) {
+          tricks.push('google-translate');
+          return { html, url: gtUrl, trick: 'google-translate', jar };
+        }
+      }
+      try { await r.arrayBuffer().catch(() => {}); } catch (e) {}
+    }
+  } catch (e) { tricks.push('gt-fail'); }
+
+  // Trik 2: Coba dengan Mobile UA + header lengkap
+  try {
+    if (Date.now() < deadline - 5000) {
+      const mobileHeaders = {
+        ...baseHeaders(jar),
+        'User-Agent': MOBILE_UA,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Sec-Ch-Ua': '"Chromium";v="126", "Google Chrome";v="126", "Not-A.Brand";v="99"',
+        'Sec-Ch-Ua-Mobile': '?1',
+        'Sec-Ch-Ua-Platform': '"Android"',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Upgrade-Insecure-Requests': '1',
+      };
+      const r = await fetchT(pageUrl, { redirect: 'manual', headers: mobileHeaders }, 10000);
+      storeCookies(jar, r.headers);
+      const ct = (r.headers.get('content-type') || '').toLowerCase();
+      if (ct.includes('html')) {
+        const html = await r.text().catch(() => '');
+        try { await r.arrayBuffer().catch(() => {}); } catch (e) {}
+        if (html && html.length > 1000 && !html.includes('Just a moment') && !html.includes('challenges.cloudflare')) {
+          tricks.push('mobile-ua');
+          return { html, url: pageUrl, trick: 'mobile-ua', jar };
+        }
+      }
+      try { await r.arrayBuffer().catch(() => {}); } catch (e) {}
+    }
+  } catch (e) { tricks.push('mobile-fail'); }
+
+  return { tricks, failed: true };
+}
+
 /* ---------- provider flows ---------- */
 async function flowOuo(pageUrl, html, deadline, jar) {
   // cari form go-link
@@ -969,6 +1038,17 @@ async function resolveUrl(raw, deadline, isManualContinue) {
   }
   if (first.error && !first.html) {
     return { ok: false, provider: provider.name, error: first.error, chain: first.chain, ms: Date.now() - t0 };
+  }
+
+  // v16: Kalau kena Cloudflare, coba SEMUA trik dulu sebelum menyerah!
+  if (first.html && (first.html.includes('Just a moment') || first.html.includes('challenges.cloudflare.com'))) {
+    const cfResult = await tryCloudflareBypass(first.url, deadline, jar);
+    if (cfResult && !cfResult.failed && cfResult.html) {
+      html = cfResult.html;
+      pageUrl = first.url; // tetap pakai URL asli untuk referensi
+      // lanjut ke proses normal dengan HTML yang sudah lolos CF
+    }
+    // kalau masih gagal, lanjut ke manual mode di bawah
   }
 
   // 1b) provider yang butuh CAPTCHA manual -> serahkan ke user
