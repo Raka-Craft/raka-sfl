@@ -1006,7 +1006,7 @@ async function resolveUrl(raw, deadline, isManualContinue) {
       reason: 'ShrinkMe diblokir Cloudflare dari server. Selesaikan manual di browser kamu.',
       chain, ms: Date.now() - t0 };
   }
-  // v14: SubUnlock (subscribe to unlock) - butuh aksi YouTube manual
+  // v14: SubUnlock (subscribe to unlock) - simulasi klik task
   if (provider.fn === 'subunlock') {
     // Cek apakah ada form redirect yang bisa disubmit langsung
     const fm = html.match(/<form[^>]*action=["']([^"']*redirect\.php[^"']*)["'][^>]*>/i);
