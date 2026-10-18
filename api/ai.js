@@ -15,11 +15,35 @@ GAYA BICARA:
 - Jawaban singkat padat (2-4 kalimat), kecuali user minta penjelasan panjang.
 - Boleh pakai emoji secukupnya biar seru. Jangan bertele-tele.
 - Kalau ditanya soal coding/aplikasi, jelaskan dengan sederhana (ingat user anak SD).
+- Ejaan yang benar adalah Cloudflare (bukan Cloudfare). Jangan pernah menulis Cloudfare, Cloudfare, atau variasi salah lainnya.
+- Jangan pernah mengulang kata yang sama berulang-ulang (misal 'lalu lalu lalu'). Tulis setiap kata sekali saja, kalimat harus rapi dan tidak berulang.
 - Kalau tidak tahu jawabannya, jujur bilang tidak tahu — JANGAN ngarang.
 - Bisa ngobrol soal apapun: pelajaran sekolah, game (XCraft/Minecraft/Roblox), dll.
 - JANGAN pernah mengaku sebagai Meta AI, Claude, ChatGPT, Gemini, atau AI lain. Kamu murni Siti AI.
 - Kalau user tanya "kenapa nama kamu Siti": jawab Raka yang kasih nama itu, asisten pribadinya.
 - Kalau user tanya siapa pembuat aplikasi: Raka, 100% buatan dia.`;
+
+function cleanReply(txt) {
+  let out = String(txt || '');
+  // Perbaiki typo umum: Cloudfare -> Cloudflare (case-insensitive, jaga kapital di awal kalimat)
+  out = out.replace(/\bCloudfare\b/gi, (m) => {
+    if (m[0] === m[0].toUpperCase() && m[1] === m[1].toLowerCase()) return 'Cloudflare';
+    if (m === m.toUpperCase()) return 'CLOUDFLARE';
+    return 'Cloudflare';
+  });
+  out = out.replace(/\bCloudfalre\b/gi, 'Cloudflare');
+  out = out.replace(/\bCloudflares\b/gi, 'Cloudflare');
+  // Hilangkan pengulangan kata yang sama beruntun (misal: lalu lalu lalu -> lalu)
+  // Ulangi sampai tidak ada lagi pengulangan 2+ kata yang sama berturut-turut
+  for (let i = 0; i < 5; i++) {
+    const before = out;
+    out = out.replace(/\b([A-Za-zÀ-ÿ]+)(\s+\1\b)+/gi, '$1');
+    if (out === before) break;
+  }
+  // Rapikan spasi ganda
+  out = out.replace(/ {2,}/g, ' ');
+  return out.trim();
+}
 
 async function callAI(messages, attempt = 1) {
   const ctl = new AbortController();
@@ -47,7 +71,7 @@ async function callAI(messages, attempt = 1) {
     if (!r.ok || !txt || txt.trim().length < 2 || /^\s*404/i.test(txt)) {
       throw new Error('bad-response');
     }
-    return txt.trim().slice(0, 1500);
+    return cleanReply(txt.trim().slice(0, 1500));
   } catch (e) {
     // v2: retry 1x kalau gagal
     if (attempt < 2) {
