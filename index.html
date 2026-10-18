@@ -289,7 +289,11 @@
   .set-ic svg { color: var(--acc1); }
   .swatches { display: flex; gap: 9px; flex-wrap: wrap; }
   .sw { width: 32px; height: 32px; border-radius: 50%; cursor: pointer;
-    border: 2px solid transparent; transition: all .2s; }
+    border: 2px solid rgba(0,0,0,.18); transition: all .2s; box-shadow: 0 0 0 1px rgba(255,255,255,.18) inset; }
+  body.light .sw { border-color: rgba(0,0,0,.22); box-shadow: 0 0 0 1px rgba(0,0,0,.08); }
+  body:not(.light) .sw { border-color: rgba(255,255,255,.28); }
+  .bg-selected { font-size: 12px; color: #a1a1aa; margin-top: 7px; }
+  body.light .bg-selected { color: #64748b; }
   .sw.on { border-color: var(--acc1); box-shadow: 0 0 12px rgba(var(--acc1-rgb),.6); transform: scale(1.12); }
   .sw-acc { width: 32px; height: 32px; border-radius: 50%; cursor: pointer;
     border: 2px solid transparent; transition: all .2s; }
@@ -452,7 +456,7 @@
       <div class="set-row"><span class="set-ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>Tema</span>
         <select id="theme"><option value="dark">Gelap</option><option value="light">Terang</option></select></div>
       <div class="set-row"><span class="set-ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>Warna latar</span>
-        <div class="swatches" id="bgSw"></div></div>
+        <div><div class="swatches" id="bgSw"></div><div class="bg-selected" id="bgSelected">Terpilih: Hitam</div></div></div>
       <div class="set-row"><span class="set-ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h2.026c2.606 0 4.724-2.118 4.724-4.724C22 6.5 17.5 2 12 2z"/></svg>Warna Aksen / Warna Navigasi</span>
         <div class="swatches" id="accSw"></div></div>
       <div class="set-row"><span class="set-ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"/></svg>Warna Aksen</span>
@@ -590,6 +594,13 @@ function applyCfg() {
   $('tgVibrate').classList.toggle('on', cfg.vibrate);
   $('tgCache').classList.toggle('on', cfg.cache);
   document.querySelectorAll('#bgSw .sw').forEach(s => s.classList.toggle('on', s.dataset.c === cfg.bg));
+  try {
+    const bgLabel = document.getElementById('bgSelected');
+    if (bgLabel) {
+      const found = (typeof BG_COLORS !== 'undefined' && Array.isArray(BG_COLORS)) ? BG_COLORS.find(b => b.c.toLowerCase() === String(cfg.bg).toLowerCase()) : null;
+      bgLabel.textContent = found ? ('Terpilih: ' + found.name) : ('Terpilih: Custom (' + cfg.bg + ')');
+    }
+  } catch (e) {}
   mkParts();
 }
 function bindToggle(id, key) {
@@ -630,10 +641,24 @@ function drawT() {
   ctx.globalAlpha = 1;
   requestAnimationFrame(drawT);
 }
-const BG_COLORS = ['#09090b', '#141024', '#0a1a1a', '#1a0a12', '#101826', '#1c1206'];
-BG_COLORS.forEach(c => {
+const BG_COLORS = [
+  { c: '#09090b', name: 'Hitam' },
+  { c: '#dc2626', name: 'Merah' },
+  { c: '#7c3aed', name: 'Ungu' },
+  { c: '#16a34a', name: 'Hijau' },
+  { c: '#2563eb', name: 'Biru' },
+  { c: '#92400e', name: 'Coklat' },
+  { c: '#db2777', name: 'Pink' },
+  { c: '#ea580c', name: 'Orange' },
+  { c: '#f8fafc', name: 'Putih' },
+  { c: '#e2e8f0', name: 'Abu Terang' },
+  { c: '#1e3a8a', name: 'Navy' },
+  { c: '#0f766e', name: 'Teal' }
+];
+BG_COLORS.forEach(item => {
+  const c = item.c;
   const d = document.createElement('div');
-  d.className = 'sw'; d.dataset.c = c; d.style.background = c;
+  d.className = 'sw'; d.dataset.c = c; d.dataset.name = item.name; d.title = item.name; d.style.background = c;
   d.onclick = () => { cfg.bg = c; applyCfg(); $('bgCustom').value = c; saveCfg(); };
   $('bgSw').appendChild(d);
 });
