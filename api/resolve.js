@@ -1041,11 +1041,11 @@ async function resolveUrl(raw, deadline, isManualContinue) {
   }
 
   // v16: Kalau kena Cloudflare, coba SEMUA trik dulu sebelum menyerah!
+  // (disimpan ke first.html agar dipakai di bawah)
   if (first.html && (first.html.includes('Just a moment') || first.html.includes('challenges.cloudflare.com'))) {
     const cfResult = await tryCloudflareBypass(first.url, deadline, jar);
     if (cfResult && !cfResult.failed && cfResult.html) {
-      html = cfResult.html;
-      pageUrl = first.url; // tetap pakai URL asli untuk referensi
+      first.html = cfResult.html;
       // lanjut ke proses normal dengan HTML yang sudah lolos CF
     }
     // kalau masih gagal, lanjut ke manual mode di bawah
