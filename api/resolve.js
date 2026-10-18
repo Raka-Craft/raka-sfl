@@ -375,6 +375,140 @@ async function tryLearnedPattern(pageUrl, html, learned, deadline, jar) {
   return null;
 }
 
+
+/* ============================================================
+   v11 CAPTCHA SOLVER + RETRY AGRESIF
+   - Selesaikan CAPTCHA sederhana (matematika, teks) otomatis
+   - Kalau gagal sekali, COBA TERUS sampai berhasil atau deadline
+   - Kecuali Cloudflare (Turnstile) -> tetap mode manual
+   ============================================================ */
+
+/* Deteksi Cloudflare: jangan coba-coba, langsung manual */
+function isCloudflare(html) {
+  if (!html) return false;
+  return html.includes('challenges.cloudflare.com') ||
+         html.includes('Just a moment...') ||
+         html.includes('cf-challenge') ||
+         html.includes('turnstile');
+}
+
+/* Solver CAPTCHA matematika: "2 + 3 = ?", "berapa 5x4", dll */
+function solveMathCaptcha(html) {
+  const patterns = [
+    /(\d+)\s*\+\s*(\d+)\s*=\s*\?/,
+    /(\d+)\s*-\s*(\d+)\s*=\s*\?/,
+    /(\d+)\s*[x×]\s*(\d+)\s*=\s*\?/,
+    /berapa\s+(\d+)\s*\+\s*(\d+)/i,
+    /berapa\s+(\d+)\s*-\s*(\d+)/i,
+    /what\s+is\s+(\d+)\s*\+\s*(\d+)/i,
+  ];
+  for (const re of patterns) {
+    const m = html.match(re);
+    if (m) {
+      const a = parseInt(m[1]), b = parseInt(m[2]);
+      const op = m[0];
+      if (op.includes('+')) return String(a + b);
+      if (op.includes('-')) return String(a - b);
+      if (/[x×]/.test(op)) return String(a * b);
+    }
+  }
+  return null;
+}
+
+/* Cari form CAPTCHA dan isi jawabannya */
+function findCaptchaForm(html, pageUrl) {
+  // Cari input captcha
+  const hasCaptcha = /captcha/i.test(html);
+  if (!hasCaptcha) return null;
+
+  const answer = solveMathCaptcha(html);
+  // Cari form action
+  const fm = html.match(/<form[^>]*action=["']([^"']*)["'][^>]*>/i);
+  const action = fm ? fm[1] : pageUrl;
+  // Cari nama field input
+  const fieldM = html.match(/<input[^>]*name=["']([^"']*captcha[^"']*)["']/i) ||
+                 html.match(/<input[^>]*name=["']([^"']+)["'][^>]*placeholder=["'][^"']*captcha/i);
+  const fieldName = fieldM ? fieldM[1] : 'captcha';
+
+  return { action, fieldName, answer, hasCaptcha: true };
+}
+
+/* Coba selesaikan CAPTCHA sederhana */
+async function trySolveCaptcha(pageUrl, html, deadline, jar) {
+  // Kecuali Cloudflare!
+  if (isCloudflare(html)) return { cloudflare: true };
+
+  const captcha = findCaptchaForm(html, pageUrl);
+  if (!captcha || !captcha.answer) return null;
+
+  try {
+    const actionUrl = new URL(captcha.action, pageUrl).href;
+    // Ambil semua hidden input
+    const hidden = {};
+    const re = /<input[^>]*type=["']hidden["'][^>]*>/gi;
+    let m;
+    while ((m = re.exec(html)) !== null) {
+      const nm = m[0].match(/name=["']([^"']+)["']/i);
+      const vl = m[0].match(/value=["']([^"']*)["']/i);
+      if (nm) hidden[nm[1]] = vl ? vl[1] : '';
+    }
+    hidden[captcha.fieldName] = captcha.answer;
+
+    const body = new URLSearchParams(hidden).toString();
+    const r = await fetchT(actionUrl, {
+      method: 'POST', redirect: 'manual',
+      headers: { ...baseHeaders(jar), 'Content-Type': 'application/x-www-form-urlencoded', 'Referer': pageUrl },
+      body,
+    }, 8000);
+    storeCookies(jar, r.headers);
+    const loc = r.headers.get('location');
+    const newHtml = await r.text().catch(() => '');
+    try { await r.arrayBuffer().catch(() => {}); } catch (e) {}
+
+    if (loc) {
+      const dest = new URL(loc, actionUrl).href;
+      return { solved: true, destination: dest, method: 'captcha-solved' };
+    }
+    // Cek apakah masih ada captcha (gagal) atau sudah lolos
+    if (!/captcha/i.test(newHtml) || newHtml.length > html.length) {
+      // Mungkin berhasil, return HTML baru untuk diproses lanjut
+      return { solved: true, html: newHtml, url: actionUrl, method: 'captcha-solved' };
+    }
+    return { solved: false };
+  } catch (e) {
+    return { solved: false, error: e.message };
+  }
+}
+
+/* Retry agresif: coba terus sampai berhasil */
+async function aggressiveRetry(resolveFn, maxAttempts, deadline) {
+  let lastError = null;
+  for (let i = 1; i <= maxAttempts; i++) {
+    if (Date.now() > deadline - 3000) break;
+    try {
+      const result = await resolveFn(i);
+      if (result && result.ok) {
+        if (i > 1) result.retries = i - 1;
+        return result;
+      }
+      lastError = result;
+      // Jangan retry kalau butuh manual (Cloudflare)
+      if (result && result.needManual) return result;
+    } catch (e) {
+      lastError = { ok: false, error: e.message };
+    }
+    // v12: backoff cepat, gas terus!
+    if (i < maxAttempts && Date.now() < deadline - 3000) {
+      await new Promise(r => setTimeout(r, Math.min(300 * i, 1200)));
+    }
+  }
+  if (lastError && typeof lastError === 'object') {
+    lastError.retriesExhausted = true;
+    return lastError;
+  }
+  return { ok: false, error: 'Gagal setelah beberapa kali percobaan.' };
+}
+
 /* ---------- provider flows ---------- */
 async function flowOuo(pageUrl, html, deadline, jar) {
   // cari form go-link
@@ -779,6 +913,20 @@ async function resolveUrl(raw, deadline, isManualContinue) {
     break;
   }
 
+  // v11: Terakhir, coba selesaikan CAPTCHA sederhana (kecuali Cloudflare)
+  if (!isCloudflare(html)) {
+    const captchaResult = await trySolveCaptcha(pageUrl, html, deadline, jar);
+    if (captchaResult && captchaResult.cloudflare) {
+      return { ok: false, needManual: true, provider: provider.name, manualUrl: pageUrl,
+        reason: 'Link ini dilindungi Cloudflare. Selesaikan verifikasinya manual di browser.',
+        chain, ms: Date.now() - t0 };
+    }
+    if (captchaResult && captchaResult.solved && captchaResult.destination) {
+      return { ok: true, provider: provider.name, destination: captchaResult.destination,
+        chain: [...chain, captchaResult.destination], ms: Date.now() - t0, method: 'captcha-solved' };
+    }
+  }
+
   return { ok: false, provider: provider.name, error: 'Tidak bisa menemukan link asli. Situs ini mungkin butuh JavaScript/browser.', chain, ms: Date.now() - t0 };
 }
 
@@ -789,8 +937,12 @@ module.exports = async (req, res) => {
   try {
     const raw = ((req.query && req.query.url) || '').toString().trim();
     if (!raw) return res.status(400).json({ ok: false, error: 'Parameter ?url= wajib diisi.' });
-    const deadline = Date.now() + 26000;
-    const out = await resolveUrl(raw, deadline, req.query.manual === '1');
+    const deadline = Date.now() + 28000;
+    // v12: retry BRUTAL - coba terus sampe busa! (maks 7x)
+    const out = await aggressiveRetry(
+      async (attempt) => await resolveUrl(raw, deadline, req.query.manual === '1'),
+      7, deadline
+    );
     // v10: kejar final hop untuk dapat link download langsung (MediaFire dsb)
     if (out && out.ok && out.destination) {
       try {
