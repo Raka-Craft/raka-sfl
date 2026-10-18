@@ -7,7 +7,7 @@ const PROVIDERS = [
   { hosts: ['exe.io', 'exeo.app'], name: 'Exe.io', fn: 'ouoLike' },
   { hosts: ['linkvertise.com', 'linkvertise.net'], name: 'Linkvertise', fn: 'linkvertise' },
   { hosts: ['sfl.gl', 'safelinku.com'], name: 'SafelinkU', fn: 'safelinku' },
-  { hosts: ['sub4unlock.com', 'sub2unlock.com'], name: 'Sub4Unlock', fn: 'generic' },
+  { hosts: ['sub4unlock.com', 'sub2unlock.com', 'unlocksubs.com'], name: 'SubUnlock', fn: 'subunlock' },
   { hosts: ['clk.sh','oko.sh','oii.la','clksz.com'], name: 'Clk.sh', fn: 'manual', reason: 'Clk.sh wajib verifikasi CAPTCHA (Cloudflare Turnstile) yang cuma bisa diselesaikan manusia.' },
   { hosts: ['bit.ly','bitly.is','j.mp','amzn.to'], name: 'Bitly', fn: 'generic' },
   { hosts: ['shrinkme.click','shrinkme.io'], name: 'ShrinkMe', fn: 'shrinkme' },
@@ -1006,6 +1006,46 @@ async function resolveUrl(raw, deadline, isManualContinue) {
       reason: 'ShrinkMe diblokir Cloudflare dari server. Selesaikan manual di browser kamu.',
       chain, ms: Date.now() - t0 };
   }
+  // v14: SubUnlock (subscribe to unlock) - butuh aksi YouTube manual
+  if (provider.fn === 'subunlock') {
+    // Cek apakah ada form redirect yang bisa disubmit langsung
+    const fm = html.match(/<form[^>]*action=["']([^"']*redirect\.php[^"']*)["'][^>]*>/i);
+    if (fm) {
+      const code = (html.match(/name=["']code["']\s+value=["']([^"']+)["']/i) || [])[1];
+      const token = (html.match(/name=["']token["']\s+value=["']([^"']+)["']/i) || [])[1];
+      if (code && token) {
+        try {
+          const actionUrl = new URL(fm[1], pageUrl).href;
+          const submitUrl = actionUrl + (actionUrl.includes('?') ? '&' : '?') +
+            'code=' + encodeURIComponent(code) + '&token=' + encodeURIComponent(token);
+          const r = await fetchT(submitUrl, { redirect: 'manual', headers: { ...baseHeaders(jar), 'Referer': pageUrl } }, 8000);
+          storeCookies(jar, r.headers);
+          const loc = r.headers.get('location');
+          const rh = await r.text().catch(() => '');
+          try { await r.arrayBuffer().catch(() => {}); } catch (e) {}
+          if (loc) {
+            const dest = new URL(loc, submitUrl).href;
+            return { ok: true, provider: provider.name, destination: dest, chain: [...chain, dest], ms: Date.now() - t0, method: 'subunlock-direct' };
+          }
+          // Cek apakah dapat link dari HTML response
+          const urlM = rh.match(/https?:\/\/[^\s"'<>\\]+/g);
+          if (urlM) {
+            for (const u of urlM) {
+              const v = validHttpUrl(u);
+              if (v && hostOf(v) !== hostOf(pageUrl) && !isSuspiciousAdHost(hostOf(v))) {
+                return { ok: true, provider: provider.name, destination: v, chain: [...chain, v], ms: Date.now() - t0, method: 'subunlock-direct' };
+              }
+            }
+          }
+        } catch (e) {}
+      }
+    }
+    // Kalau tidak bisa otomatis, jelaskan dengan jelas
+    return { ok: false, needManual: true, provider: provider.name, manualUrl: pageUrl,
+      reason: 'Link ini tipe "Subscribe to Unlock" - kamu harus subscribe channel YouTube-nya dulu di browser, baru link download-nya kebuka.',
+      chain, ms: Date.now() - t0 };
+  }
+
   if (provider.fn === 'linkvertise') {
     const r = await flowLinkvertise(pageUrl, deadline);
     if (r) return { ok: true, provider: provider.name, destination: r.destination, chain: [...chain, r.destination], ms: Date.now() - t0, method: 'api' };
