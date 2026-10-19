@@ -7,7 +7,7 @@ const PROVIDERS = [
   { hosts: ['exe.io', 'exeo.app'], name: 'Exe.io', fn: 'ouoLike' },
   { hosts: ['linkvertise.com', 'linkvertise.net'], name: 'Linkvertise', fn: 'linkvertise' },
   { hosts: ['sfl.gl', 'safelinku.com'], name: 'SafelinkU', fn: 'safelinku' },
-  { hosts: ['sub4unlock.com', 'sub2unlock.com', 'unlocksubs.com'], name: 'SubUnlock', fn: 'subunlock' },
+  { hosts: ['sub4unlock.com', 'sub4unlock.co', 'sub4unlock.io', 'sub2unlock.com', 'unlocksubs.com'], name: 'SubUnlock', fn: 'subunlock' },
   { hosts: ['clk.sh','oko.sh','oii.la','clksz.com'], name: 'Clk.sh', fn: 'manual', reason: 'Clk.sh wajib verifikasi CAPTCHA (Cloudflare Turnstile) yang cuma bisa diselesaikan manusia.' },
   { hosts: ['bit.ly','bitly.is','j.mp','amzn.to'], name: 'Bitly', fn: 'generic' },
   { hosts: ['shrinkme.click','shrinkme.io'], name: 'ShrinkMe', fn: 'shrinkme' },
@@ -208,13 +208,7 @@ function genericCandidates(html, selfHost) {
 }
 
 
-/* ============================================================
-   v10 AUTO-LEARNING: sistem mempelajari pola bypass domain baru
-   Cara kerja:
-   1. Coba pola umum (tombol continue, form timer, JS reveal, dll)
-   2. Kalau berhasil, ingat polanya untuk domain itu
-   3. Request berikutnya untuk domain sama langsung pakai pola yang dipelajari
-   ============================================================ */
+/* v10 AUTO-LEARNING: coba pola umum, ingat yang berhasil per domain */
 const learnedPatterns = {}; // domain -> { method, pattern }
 
 function learnPattern(domain, method, detail) {
@@ -660,13 +654,7 @@ async function submitCaptchaAnswer(pageUrl, html, answer, deadline, jar) {
 }
 
 
-/* ============================================================
-   v16 CLOUDFLARE BYPASS MAKSIMAL
-   Trik yang dicoba berurutan:
-   1. Google Translate proxy (IP Google dipercaya Cloudflare)
-   2. User-Agent mobile (kadang CF lebih longgar di mobile)
-   3. Header lengkap seperti browser asli
-   ============================================================ */
+/* v16 CLOUDFLARE BYPASS: Google Translate proxy + mobile UA + header lengkap */
 const MOBILE_UA = 'Mozilla/5.0 (Linux; Android 10; Redmi Note 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36';
 
 async function tryCloudflareBypass(pageUrl, deadline, jar) {
@@ -729,14 +717,7 @@ async function tryCloudflareBypass(pageUrl, deadline, jar) {
 }
 
 
-/* ============================================================
-   v17 BUTTON HUNTER (ide Tuan Raka)
-   "bikin server lebih sensitif sama tombol download dan next,
-    tiap halaman auto-pencet yang download, pindah halaman cari lagi"
-   Cara kerja: tiap halaman -> skor semua tombol/link -> ikuti yang
-   terbaik -> di halaman baru ulangi (maks 6 langkah) sampai dapat
-   tujuan akhir (file host / mediafire / ekstensi file).
-   ============================================================ */
+/* v17 BUTTON HUNTER (ide Tuan): skor tombol/link per halaman, ikuti terbaik, ulangi s.d. tujuan akhir */
 function resolveAbs(base, href) {
   try {
     if (!href) return null;
@@ -1270,6 +1251,32 @@ async function resolveUrl(raw, deadline, isManualContinue) {
   }
   // v14: SubUnlock (subscribe to unlock) - simulasi klik task
   if (provider.fn === 'subunlock') {
+    // v20: Sub4Unlock (Inertia.js) menyimpan URL tujuan di data-page -> ambil langsung!
+    try {
+      const dp = html.match(/data-page="([^"]{100,20000})"/);
+      if (dp) {
+        const unesc = dp[1].replace(/&quot;/g, '"').replace(/\\\//g, '/').replace(/&amp;/g, '&');
+        const um = unesc.match(/"link"\s*:\s*\{[^}]{0,500}?"url"\s*:\s*"([^"]+)"/);
+        if (um) {
+          const dest0 = validHttpUrl(um[1].replace(/\\/g, ''));
+          if (dest0 && hostOf(dest0) !== hostOf(pageUrl)) {
+            // v20: kalau destinasi masih shortener (mis. sfl.gl), resolve rekursif
+            const dh = hostOf(dest0);
+            const isShort = PROVIDERS.some(p => p.hosts.some(h => dh === h || dh.endsWith('.' + h)));
+            if (isShort && Date.now() < deadline - 8000) {
+              const sub = await resolveUrl(dest0, deadline, false);
+              if (sub && sub.ok && sub.destination) {
+                return { ok: true, provider: provider.name + ' → ' + sub.provider,
+                  destination: sub.destination, chain: [...chain, dest0, ...sub.chain.slice(1)],
+                  ms: Date.now() - t0, method: 'subunlock-data+recursive' };
+              }
+            }
+            return { ok: true, provider: provider.name, destination: dest0,
+              chain: [...chain, dest0], ms: Date.now() - t0, method: 'subunlock-data' };
+          }
+        }
+      }
+    } catch (e) {}
     // Cek apakah ada form redirect yang bisa disubmit langsung
     const fm = html.match(/<form[^>]*action=["']([^"']*redirect\.php[^"']*)["'][^>]*>/i);
     if (fm) {
