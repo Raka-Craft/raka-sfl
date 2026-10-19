@@ -708,7 +708,7 @@ const HUNT_WORDS = [
  [/click|klik/i, 30],
 ];
 
-function scoreHunt(text, href, cls) {
+function scoreHunt(text, href, cls, pageUrl) {
  let sc = 0;
  const t = String(text || '');
  for (const [re, pts] of HUNT_WORDS) { if (re.test(t)) sc = Math.max(sc, pts); }
@@ -716,6 +716,10 @@ function scoreHunt(text, href, cls) {
  if (/download|\/go\/|\/out\//i.test(hh)) sc += 20;
  else if (/next|continue|lanjut|skip/i.test(hh)) sc += 10;
  if (/download|continue|skip|next|proceed/i.test(String(cls || ''))) sc += 15;
+ try {
+ const hu = new URL(hh, pageUrl);
+ if (hu.hostname === new URL(pageUrl).hostname && /^\/\d+(-\d+)?\/?$/i.test(hu.pathname)) sc += 35;
+ } catch (e) {}
  return sc;
 }
 
@@ -730,8 +734,8 @@ function findHuntButtons(html, pageUrl) {
  const hm = attrs.match(/href\s*=\s*["']([^"']+)["']/i);
  if (!hm) continue;
  const cm = attrs.match(/(?:class|id)\s*=\s*["']([^"']+)["']/i);
- const sc = scoreHunt(inner, hm[1], cm ? cm[1] : '');
- if (sc < 25) continue;
+ const sc = scoreHunt(inner, hm[1], cm ? cm[1] : '', pageUrl);
+ if (sc < 20) continue;
  const u = resolveAbs(pageUrl, hm[1]);
  if (!u || seen.has(u)) continue;
  if (isSuspiciousAdHost(hostOf(u))) continue;
@@ -761,6 +765,25 @@ function findHuntButtons(html, pageUrl) {
  if (isSuspiciousAdHost(hostOf(u))) continue;
  seen.add(u);
  out.push({ url: u, score: 70, text: 'form' });
+ }
+ const reA2 = /<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>/gi;
+ let m2;
+ while ((m2 = reA2.exec(html)) !== null) {
+ const href2 = m2[1];
+ let sc2 = 0;
+ try {
+ const hu2 = new URL(href2, pageUrl);
+ const pu2 = new URL(pageUrl);
+ if (hu2.hostname === pu2.hostname && /^\/\d+(-\d+)?\/?$/i.test(hu2.pathname)) sc2 = 35;
+ else if (/\/download\/?$/i.test(hu2.pathname) && hu2.hostname === pu2.hostname) sc2 = 30;
+ } catch (e) {}
+ if (sc2 >= 20) {
+ const u2 = resolveAbs(pageUrl, href2);
+ if (!u2 || seen.has(u2)) continue;
+ if (isSuspiciousAdHost(hostOf(u2))) continue;
+ seen.add(u2);
+ out.push({ url: u2, score: sc2, text: '[pola]' });
+ }
  }
  return out.sort((a, b) => b.score - a.score);
 }
@@ -1193,13 +1216,33 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  if (provider.fn !== 'manual' && first.chain.length > 1) {
  const dest = first.chain[first.chain.length - 1];
  if (hostOf(dest) !== hostOf(start)) {
- if (!isFinalDestination(dest) && first.html && Date.now() < deadline - 8000) {
- const deeper = await buttonHunterFlow(dest, first.html, deadline, jar);
+ if (!isFinalDestination(dest) && Date.now() < deadline - 8000) {
+ let dHtml = first.html;
+ const hasBtn = dHtml && /download|unduh|lanjut|continue/i.test(dHtml);
+ if (!dHtml || dHtml.length < 5000 || !hasBtn) {
+ try {
+ const rr = await fetchT(dest, { headers: { ...baseHeaders(jar), 'Referer': start, 'Upgrade-Insecure-Requests': '1' } }, 10000);
+ const cth = (rr.headers.get('content-type') || '').toLowerCase();
+ if (cth.includes('html')) dHtml = await rr.text().catch(() => '');
+ try { await rr.arrayBuffer().catch(() => {}); } catch (e) {}
+ } catch (e) {}
+ }
+ let deeper = await buttonHunterFlow(dest, dHtml || '', deadline, jar);
+ if (!deeper || !deeper.destination) {
+ try {
+ const uu = new URL(dest);
+ const gt = 'https://' + uu.hostname.replace(/\./g, '-') + '.translate.goog' + uu.pathname + uu.search + '?_x_tr_sl=en&_x_tr_tl=id';
+ const rg = await fetchT(gt, { headers: baseHeaders(jar) }, 12000);
+ const hg = await rg.text().catch(() => '');
+ try { await rg.arrayBuffer().catch(() => {}); } catch (e) {}
+ if (hg && hg.length > 30000) deeper = await buttonHunterFlow(dest, hg, deadline, jar);
+ } catch (e) {}
+ }
  if (deeper && deeper.destination) {
  return { ok: true, provider: provider.name + ' (Deep)', destination: deeper.destination,
  chain: [...first.chain, deeper.destination], ms: Date.now() - t0, method: 'redirect+deep' };
  }
- const gc = genericCandidates(first.html, hostOf(dest)).filter(u => isFinalDestination(u));
+ const gc = genericCandidates(dHtml || '', hostOf(dest)).filter(u => isFinalDestination(u));
  if (gc.length > 0) {
  return { ok: true, provider: provider.name + ' (Deep)', destination: gc[0],
  chain: [...first.chain, gc[0]], ms: Date.now() - t0, method: 'redirect+deep' };
