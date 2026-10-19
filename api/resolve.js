@@ -888,7 +888,7 @@ if(v===0){nonce=n;break;}
 if(nonce<0)return null;
 const csrfM=html.match(/name="rg_csrf"[^>]*value="([^"]*)"/);
 const fd=new URLSearchParams({rg_pow_prefix:spec.prefix,rg_pow_exp:spec.exp,rg_pow_diff:spec.diff,rg_pow_sig:spec.sig,rg_pow_nonce:String(nonce),rg_csrf:csrfM?csrfM[1]:''});
-const r2=await fetchT(ep,{method:'POST',body:fd.toString(),headers:{'User-Agent':'Mozilla/5.0','Content-Type':'application/x-www-form-urlencoded'}},15000);
+const r2=await fetchT(ep,{method:'POST',body:fd.toString(),headers:{'User-Agent':'Mozilla/5.0'}},25000);
 const txt=await r2.text().catch(()=> '');
 try{await r2.arrayBuffer().catch(()=>{});}catch(e){}
 for(const line of txt.split('\n')){
