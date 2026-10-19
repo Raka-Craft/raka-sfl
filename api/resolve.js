@@ -770,12 +770,13 @@ function findHuntButtons(html, pageUrl) {
  let m2;
  while ((m2 = reA2.exec(html)) !== null) {
  const href2 = m2[1];
+ if (href2.includes('#')) continue;
  let sc2 = 0;
  try {
  const hu2 = new URL(href2, pageUrl);
  const pu2 = new URL(pageUrl);
- if (hu2.hostname === pu2.hostname && /^\/\d+(-\d+)?\/?$/i.test(hu2.pathname)) sc2 = 35;
- else if (/\/download\/?$/i.test(hu2.pathname) && hu2.hostname === pu2.hostname) sc2 = 30;
+ if (hu2.hostname === pu2.hostname && /^\/\d+(-\d+)?\/?$/i.test(hu2.pathname)) sc2 = 75;
+ else if (/\/download\/?$/i.test(hu2.pathname) && hu2.hostname === pu2.hostname) sc2 = 70;
  } catch (e) {}
  if (sc2 >= 20) {
  const u2 = resolveAbs(pageUrl, href2);
@@ -816,6 +817,7 @@ async function buttonHunterFlow(pageUrl, html, deadline, jar) {
  const btns = findHuntButtons(cur.html || '', cur.url);
  let nxt = null;
  for (const b of btns) {
+ if (b.url.includes('#')) continue;
  if (visited.has(b.url.split('#')[0])) continue;
  nxt = b; break;
  }
