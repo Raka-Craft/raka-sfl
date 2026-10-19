@@ -183,6 +183,7 @@ function genericCandidates(html, selfHost) {
  if (isSuspiciousAdHost(h)) continue;
  if (/\.(png|jpe?g|gif|webp|svg|ico|css|js|woff2?|ttf)(\?|$)/i.test(v)) continue;
  if (/\/(intent\/|sharer\.php)/i.test(v) && /(^|\.)(x|twitter|facebook)\.com$/i.test(h)) continue;
+ if (/^(gmpg\.org|www\.w3\.org|schema\.org|purl\.org)$/i.test(h)) continue;
  found.set(v, (found.get(v) || 0) + 1);
  }
  const score = (url) => {
@@ -794,6 +795,7 @@ function isFinalDestination(url) {
  const h = hostOf(url);
  if (!h) return false;
  if (/\/(intent\/|sharer\.php)/i.test(url) && /(^|\.)(x|twitter|facebook)\.com$/i.test(h)) return false;
+ if (/^(gmpg\.org|www\.w3\.org|schema\.org|purl\.org)$/i.test(h)) return false;
  if (h === 'mediafire.com' || h.endsWith('.mediafire.com')) return true;
  const isFileExt = /\.(zip|rar|7z|apk|xapk|pdf|mp4|mkv|mp3|exe|dmg)(\?|$)/i.test(url);
  if (isFileExt) return true;
