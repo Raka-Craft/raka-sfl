@@ -95,7 +95,6 @@ function validHttpUrl(s) {
 }
 
 /* ---------- decoder ---------- */
-// AdFly: ysmm -> interleave split -> xor digit -> base64 -> slice(2)
 function decodeAdfly(ysmm) {
   let A = '', B = '';
   for (let i = 0; i < ysmm.length; i++) {
@@ -299,7 +298,6 @@ async function autoLearnBypass(pageUrl, html, deadline, jar) {
   const domain = hostOf(pageUrl);
   const selfHost = domain;
 
-  // Cek apakah sudah ada pola yang dipelajari untuk domain ini
   const learned = getLearnedPattern(domain);
   if (learned) {
     // Coba pola yang sudah dipelajari dulu
@@ -327,7 +325,6 @@ async function autoLearnBypass(pageUrl, html, deadline, jar) {
           const test = await fetchT(cand.url, { redirect: 'manual', headers: baseHeaders(jar) }, 5000);
           const loc = test.headers.get('location');
           try { await test.arrayBuffer().catch(() => {}); } catch (e) {}
-          // Kalau redirect ke file host atau return file, anggap berhasil
           const finalUrl = loc ? new URL(loc, cand.url).href : cand.url;
           const fh = hostOf(finalUrl);
           const isFile = FILE_HOSTS.some(f => fh === f || fh.endsWith('.' + f)) ||
@@ -771,7 +768,6 @@ function findHuntButtons(html, pageUrl) {
     seen.add(u);
     out.push({ url: u, score: sc, text: inner.slice(0, 40) });
   }
-  // 2) <button> berteks download-ish -> pakai form action terdekat
   const reB = /<button\b([^>]*)>([\s\S]{0,80}?)<\/button>/gi;
   while ((m = reB.exec(html)) !== null) {
     const inner = m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -918,7 +914,6 @@ async function flowLinkvertise(pageUrl, deadline) {
     try { await r2.arrayBuffer().catch(() => {}); } catch (e) {}
     const target = j2 && j2.data && (j2.data.target || (j2.data.link && j2.data.link.url));
     const v = target && validHttpUrl(target);
-    // v19: tolak kalau target balik ke linkvertise sendiri (sitemap / halaman salah)
     if (v && /linkvertise\.com$/i.test(hostOf(v))) return null;
     return v ? { destination: v } : null;
   } catch (e) { return null; }
@@ -950,7 +945,6 @@ async function safelinkuPost(url, body, referer, jar, deadline) {
   } catch (e) { return null; }
 }
 /* ShrinkMe: cookie -> form -> counter -> POST /links/go */
-// v18: fetch yang otomatis lolos Cloudflare "Just a moment" via Google Translate proxy
 async function fetchBypassCF(url, opts, ms, jar) {
   let r = await fetchT(url, opts, ms);
   let ct = (r.headers.get('content-type') || '').toLowerCase();
@@ -1041,7 +1035,6 @@ async function flowShrinkme(pageUrl, html, deadline, jar) {
 async function flowSafelinku(pageUrl, html, deadline, jar) {
   const dbg = [];
   try {
-    // Jika kena Cloudflare challenge, pakai Google Translate sebagai proxy (IP Google dipercaya CF)
     if (!html || html.includes('Just a moment...') || html.includes('challenges.cloudflare.com')) {
       dbg.push('cf-detected');
       try {
@@ -1098,7 +1091,6 @@ async function flowSafelinku(pageUrl, html, deadline, jar) {
         const goUrl = gj && gj.url && validHttpUrl(gj.url);
         if (!goUrl) { dbg.push("no-gourl"); return { _dbg: dbg }; }
         // 4) halaman ready/go -> window.location.href = link asli
-        // (pakai GT proxy kalau kena CF, karena ready/go ada di domain shortener)
         async function fetchReadyGo(goUrl) {
           let rg = await fetchT(goUrl, { redirect: 'manual', headers: { ...baseHeaders(jar), 'Referer': articleUrl } }, 6000);
           storeCookies(jar, rg.headers);
@@ -1178,7 +1170,6 @@ async function resolveUrl(raw, deadline, isManualContinue) {
   const start = validHttpUrl(raw);
   if (!start) return { ok: false, error: 'URL tidak valid. Pakai format https://...' };
 
-  // Mode lanjut manual: kalau user sudah menempel link file asli (hasil kerja manualnya),
   // langsung terima tanpa perlu di-resolve lagi.
   if (isManualContinue) {
     const sh = hostOf(start);
@@ -1191,10 +1182,22 @@ async function resolveUrl(raw, deadline, isManualContinue) {
   const jar = {};
   const first = await fetchChain(start, deadline, jar);
 
-  // 1) redirect murni ke host lain = selesai (kecuali provider manual: redirectnya hanya antar-muka CAPTCHA)
+  // 1) redirect murni ke host lain
   if (provider.fn !== 'manual' && first.chain.length > 1) {
     const dest = first.chain[first.chain.length - 1];
     if (hostOf(dest) !== hostOf(start)) {
+      if (!isFinalDestination(dest) && first.html && Date.now() < deadline - 8000) {
+        const deeper = await buttonHunterFlow(dest, first.html, deadline, jar);
+        if (deeper && deeper.destination) {
+          return { ok: true, provider: provider.name + ' (Deep)', destination: deeper.destination,
+            chain: [...first.chain, deeper.destination], ms: Date.now() - t0, method: 'redirect+deep' };
+        }
+        const gc = genericCandidates(first.html, hostOf(dest)).filter(u => isFinalDestination(u));
+        if (gc.length > 0) {
+          return { ok: true, provider: provider.name + ' (Deep)', destination: gc[0],
+            chain: [...first.chain, gc[0]], ms: Date.now() - t0, method: 'redirect+deep' };
+        }
+      }
       return { ok: true, provider: provider.name, destination: dest, chain: first.chain, ms: Date.now() - t0, method: 'redirect' };
     }
   }
@@ -1202,7 +1205,6 @@ async function resolveUrl(raw, deadline, isManualContinue) {
     return { ok: false, provider: provider.name, error: first.error, chain: first.chain, ms: Date.now() - t0 };
   }
 
-  // v16: Kalau kena Cloudflare, coba SEMUA trik dulu sebelum menyerah!
   // (disimpan ke first.html agar dipakai di bawah)
   if (first.html && (first.html.includes('Just a moment') || first.html.includes('challenges.cloudflare.com'))) {
     const cfResult = await tryCloudflareBypass(first.url, deadline, jar);
@@ -1213,7 +1215,6 @@ async function resolveUrl(raw, deadline, isManualContinue) {
     // kalau masih gagal, lanjut ke manual mode di bawah
   }
 
-  // 1b) provider yang butuh CAPTCHA manual -> serahkan ke user
   if (provider.fn === 'manual') {
     return { ok: false, needManual: true, provider: provider.name, manualUrl: first.url,
       reason: provider.reason || 'Link ini butuh verifikasi CAPTCHA manual.',
@@ -1225,7 +1226,6 @@ async function resolveUrl(raw, deadline, isManualContinue) {
   let selfHost = hostOf(pageUrl);
   let chain = first.chain;
 
-  // 2b) flow khusus provider (stateless, hanya halaman pertama)
   if (provider.fn === 'adfly') {
     const m = html.match(/ysmm\s*=\s*['"]([^'"]+)['"]/);
     if (m) {
@@ -1250,7 +1250,6 @@ async function resolveUrl(raw, deadline, isManualContinue) {
   }
   // v14: SubUnlock (subscribe to unlock) - simulasi klik task
   if (provider.fn === 'subunlock') {
-    // v20: Sub4Unlock (Inertia.js) menyimpan URL tujuan di data-page -> ambil langsung!
     try {
       const dp = html.match(/data-page="([^"]{100,20000})"/);
       if (dp) {
@@ -1317,7 +1316,6 @@ async function resolveUrl(raw, deadline, isManualContinue) {
   if (provider.fn === 'linkvertise') {
     const r = await flowLinkvertise(pageUrl, deadline);
     if (r) return { ok: true, provider: provider.name, destination: r.destination, chain: [...chain, r.destination], ms: Date.now() - t0, method: 'api' };
-    // v21: API gagal -> coba button hunter di halaman linkvertise
     const lhunt = await buttonHunterFlow(pageUrl, html, deadline, jar);
     if (lhunt && lhunt.destination) {
       return { ok: true, provider: provider.name + ' (Button Hunter)', destination: lhunt.destination,
@@ -1325,7 +1323,6 @@ async function resolveUrl(raw, deadline, isManualContinue) {
     }
   }
 
-  // v10 AUTO-LEARNING: untuk provider tidak dikenal / generic, pelajari polanya
   if (provider.fn === 'generic' || provider.name === 'Otomatis') {
     const learned = await autoLearnBypass(pageUrl, html, deadline, jar);
     if (learned && learned.destination) {
@@ -1333,7 +1330,6 @@ async function resolveUrl(raw, deadline, isManualContinue) {
         chain: [...chain, learned.destination], ms: Date.now() - t0,
         method: learned.method, learnedPattern: learned.pattern };
     }
-    // v17 BUTTON HUNTER (ide Tuan): buru tombol download/next berlapis-lapis
     const hunt = await buttonHunterFlow(pageUrl, html, deadline, jar);
     if (hunt && hunt.destination) {
       learnPattern(hostOf(pageUrl), 'button-hunter', 'tombol download/next');
@@ -1343,7 +1339,6 @@ async function resolveUrl(raw, deadline, isManualContinue) {
     }
   }
 
-  // 3-6) loop: ikuti redirect JS satu-host (mis. sub4unlock S -> LP.php), lalu ekstraksi
   for (let hop = 0; hop < 3; hop++) {
     if (Date.now() > deadline - 2000) break;
 
@@ -1358,8 +1353,6 @@ async function resolveUrl(raw, deadline, isManualContinue) {
       if (nxt.html) { html = nxt.html; pageUrl = nxt.url; selfHost = hostOf(pageUrl); chain = [...chain, ...nxt.chain.slice(1)]; continue; }
     }
 
-    // 4) JS redirect — bedakan host lain (tujuan) vs host sama (langkah lanjutan, ikuti)
-    // Filter URL iklan/popunder dulu biar tidak kepilih sebagai "tujuan"
     const allJsr = jsRedirects(html).filter(u => !isSuspiciousAdHost(hostOf(u)) && u.indexOf('+') < 0 && !/[?=]$/.test(u));
     const extJsr = allJsr.filter(u => hostOf(u) !== selfHost);
     if (extJsr.length > 0) {
@@ -1395,7 +1388,6 @@ async function resolveUrl(raw, deadline, isManualContinue) {
     }
   }
 
-  // v11: Terakhir, coba selesaikan CAPTCHA sederhana (kecuali Cloudflare)
   if (!isCloudflare(html)) {
     const captchaResult = await trySolveCaptcha(pageUrl, html, deadline, jar);
     if (captchaResult && captchaResult.cloudflare) {
@@ -1425,7 +1417,6 @@ module.exports = async (req, res) => {
       async (attempt) => await resolveUrl(raw, deadline, req.query.manual === '1'),
       7, deadline
     );
-    // v10: kejar final hop untuk dapat link download langsung (MediaFire dsb)
     if (out && out.ok && out.destination) {
       try {
         const fin = await finalHop(out.destination, deadline);
