@@ -769,8 +769,11 @@ function isFinalDestination(url) {
  const h = hostOf(url);
  if (!h) return false;
  if (h === 'mediafire.com' || h.endsWith('.mediafire.com')) return true;
+ const isFileExt = /\.(zip|rar|7z|apk|xapk|pdf|mp4|mkv|mp3|exe|dmg)(\?|$)/i.test(url);
+ if (isFileExt) return true;
+ const isGH = (h === 'github.com' || h.endsWith('.github.com'));
+ if (isGH) return /\/releases\/download\//i.test(url);
  if (FILE_HOSTS.some(f => h === f || h.endsWith('.' + f))) return true;
- if (/\.(zip|rar|7z|apk|xapk|pdf|mp4|mkv|mp3|exe|dmg)(\?|$)/i.test(url)) return true;
  return false;
 }
 
