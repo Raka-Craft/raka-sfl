@@ -184,6 +184,7 @@ function genericCandidates(html, selfHost) {
  if (/\.(png|jpe?g|gif|webp|svg|ico|css|js|woff2?|ttf)(\?|$)/i.test(v)) continue;
  if (/\/(intent\/|sharer\.php)/i.test(v) && /(^|\.)(x|twitter|facebook)\.com$/i.test(h)) continue;
  if (/^(gmpg\.org|www\.w3\.org|schema\.org|purl\.org)$/i.test(h)) continue;
+ if (/(^|\.)wordpress\.org$/i.test(h) || h === 'api.w.org') continue;
  found.set(v, (found.get(v) || 0) + 1);
  }
  const score = (url) => {
@@ -796,6 +797,7 @@ function isFinalDestination(url) {
  if (!h) return false;
  if (/\/(intent\/|sharer\.php)/i.test(url) && /(^|\.)(x|twitter|facebook)\.com$/i.test(h)) return false;
  if (/^(gmpg\.org|www\.w3\.org|schema\.org|purl\.org)$/i.test(h)) return false;
+ if (/(^|\.)wordpress\.org$/i.test(h) || h === 'api.w.org') return false;
  if (h === 'mediafire.com' || h.endsWith('.mediafire.com')) return true;
  const isFileExt = /\.(zip|rar|7z|apk|xapk|pdf|mp4|mkv|mp3|exe|dmg)(\?|$)/i.test(url);
  if (isFileExt) return true;
@@ -1429,8 +1431,8 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  return { ok: true, provider: provider.name, destination: b64[0], chain: [...chain, b64[0]], ms: Date.now() - t0, method: 'base64', candidates: b64.slice(1, 6) };
  }
 
- // 6) kandidat generik — user pilih sendiri
- const cands = genericCandidates(html, selfHost).slice(0, 8);
+ // 6) kandidat generik — hanya yang lolos final destination
+ const cands = genericCandidates(html, selfHost).filter(u => isFinalDestination(u)).slice(0, 8);
  if (cands.length > 0) {
  return { ok: true, provider: provider.name, destination: cands[0], chain, ms: Date.now() - t0, method: 'tebak', candidates: cands.slice(1), note: 'Link tidak terdeteksi otomatis — ini tebakan terbaik, cek daftar kandidat.' };
  }
