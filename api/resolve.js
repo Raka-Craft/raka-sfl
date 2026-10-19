@@ -728,6 +728,150 @@ async function tryCloudflareBypass(pageUrl, deadline, jar) {
   return { tricks, failed: true };
 }
 
+
+/* ============================================================
+   v17 BUTTON HUNTER (ide Tuan Raka)
+   "bikin server lebih sensitif sama tombol download dan next,
+    tiap halaman auto-pencet yang download, pindah halaman cari lagi"
+   Cara kerja: tiap halaman -> skor semua tombol/link -> ikuti yang
+   terbaik -> di halaman baru ulangi (maks 6 langkah) sampai dapat
+   tujuan akhir (file host / mediafire / ekstensi file).
+   ============================================================ */
+function resolveAbs(base, href) {
+  try {
+    if (!href) return null;
+    href = href.trim();
+    if (/^(javascript|data|mailto|tel):/i.test(href)) return null;
+    const u = new URL(href, base);
+    return (u.protocol === 'http:' || u.protocol === 'https:') ? u.href : null;
+  } catch (e) { return null; }
+}
+
+const HUNT_WORDS = [
+  [/free\s*download/i, 95],
+  [/download|unduh/i, 90],
+  [/get\s*link|dapatkan/i, 85],
+  [/continue|lanjut/i, 80],
+  [/\bnext\b|berikut/i, 75],
+  [/skip|lewati/i, 70],
+  [/proceed/i, 65],
+  [/verify|verifikasi/i, 40],
+  [/submit|kirim/i, 35],
+  [/click|klik/i, 30],
+];
+
+function scoreHunt(text, href, cls) {
+  let sc = 0;
+  const t = String(text || '');
+  for (const [re, pts] of HUNT_WORDS) { if (re.test(t)) sc = Math.max(sc, pts); }
+  const hh = String(href || '').toLowerCase();
+  if (/download|\/go\/|\/out\//i.test(hh)) sc += 20;
+  else if (/next|continue|lanjut|skip/i.test(hh)) sc += 10;
+  if (/download|continue|skip|next|proceed/i.test(String(cls || ''))) sc += 15;
+  return sc;
+}
+
+function findHuntButtons(html, pageUrl) {
+  const out = [], seen = new Set();
+  // 1) semua <a>
+  const reA = /<a\b([^>]*)>([\s\S]{0,150}?)<\/a>/gi;
+  let m;
+  while ((m = reA.exec(html)) !== null) {
+    const attrs = m[1];
+    const inner = m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const hm = attrs.match(/href\s*=\s*["']([^"']+)["']/i);
+    if (!hm) continue;
+    const cm = attrs.match(/(?:class|id)\s*=\s*["']([^"']+)["']/i);
+    const sc = scoreHunt(inner, hm[1], cm ? cm[1] : '');
+    if (sc < 25) continue;
+    const u = resolveAbs(pageUrl, hm[1]);
+    if (!u || seen.has(u)) continue;
+    if (isSuspiciousAdHost(hostOf(u))) continue;
+    seen.add(u);
+    out.push({ url: u, score: sc, text: inner.slice(0, 40) });
+  }
+  // 2) <button> berteks download-ish -> pakai form action terdekat
+  const reB = /<button\b([^>]*)>([\s\S]{0,80}?)<\/button>/gi;
+  while ((m = reB.exec(html)) !== null) {
+    const inner = m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!/download|unduh|continue|next|lanjut|skip|lewati|proceed/i.test(inner)) continue;
+    const before = html.slice(Math.max(0, m.index - 1500), m.index);
+    const fm = before.match(/<form\b[^>]*action\s*=\s*["']([^"']+)["'][^>]*>(?!.*<form\b)/is);
+    const act = fm ? fm[1] : pageUrl;
+    const u = resolveAbs(pageUrl, act);
+    if (!u || seen.has(u)) continue;
+    if (isSuspiciousAdHost(hostOf(u))) continue;
+    seen.add(u);
+    out.push({ url: u, score: 80, text: 'btn:' + inner.slice(0, 30) });
+  }
+  // 3) <form> yang isinya download-ish
+  const reF = /<form\b([^>]*)>([\s\S]{0,1500}?)<\/form>/gi;
+  while ((m = reF.exec(html)) !== null) {
+    if (!/download|unduh|continue|next|lanjut|skip|lewati|proceed/i.test(m[2])) continue;
+    const am = m[1].match(/action\s*=\s*["']([^"']+)["']/i);
+    const u = resolveAbs(pageUrl, am ? am[1] : pageUrl);
+    if (!u || seen.has(u)) continue;
+    if (isSuspiciousAdHost(hostOf(u))) continue;
+    seen.add(u);
+    out.push({ url: u, score: 70, text: 'form' });
+  }
+  return out.sort((a, b) => b.score - a.score);
+}
+
+function isFinalDestination(url) {
+  const h = hostOf(url);
+  if (!h) return false;
+  if (h === 'mediafire.com' || h.endsWith('.mediafire.com')) return true;
+  if (FILE_HOSTS.some(f => h === f || h.endsWith('.' + f))) return true;
+  if (/\.(zip|rar|7z|apk|xapk|pdf|mp4|mkv|mp3|exe|dmg)(\?|$)/i.test(url)) return true;
+  return false;
+}
+
+async function buttonHunterFlow(pageUrl, html, deadline, jar) {
+  const visited = new Set();
+  let cur = { url: pageUrl, html };
+  for (let step = 0; step < 6; step++) {
+    if (Date.now() > deadline - 4000) break;
+    const key = cur.url.split('#')[0];
+    if (visited.has(key)) break;
+    visited.add(key);
+    // Sudah sampai tujuan akhir?
+    if (step > 0 && isFinalDestination(cur.url)) {
+      return { destination: cur.url, steps: step };
+    }
+    // Buru tombol di halaman ini
+    const btns = findHuntButtons(cur.html || '', cur.url);
+    let nxt = null;
+    for (const b of btns) {
+      if (visited.has(b.url.split('#')[0])) continue;
+      nxt = b; break;
+    }
+    if (!nxt) break;
+    // Ikuti tombol terbaik
+    try {
+      const r = await fetchT(nxt.url, { redirect: 'manual', headers: { ...baseHeaders(jar), 'Referer': cur.url } }, 9000);
+      storeCookies(jar, r.headers);
+      const loc = r.headers.get('location');
+      const ct = (r.headers.get('content-type') || '').toLowerCase();
+      try { await r.arrayBuffer().catch(() => {}); } catch (e) {}
+      if (loc) {
+        const dest = new URL(loc, nxt.url).href;
+        if (isFinalDestination(dest)) return { destination: dest, steps: step + 1 };
+        const f2 = await fetchChain(dest, deadline, jar);
+        if (f2.html) { cur = { url: f2.url, html: f2.html }; continue; }
+        break;
+      }
+      if (ct.includes('html')) {
+        const h2 = await (await fetchT(nxt.url, { redirect: 'follow', headers: { ...baseHeaders(jar), 'Referer': cur.url } }, 9000)).text().catch(() => '');
+        cur = { url: nxt.url, html: h2 };
+        continue;
+      }
+      break;
+    } catch (e) { break; }
+  }
+  return null;
+}
+
 /* ---------- provider flows ---------- */
 async function flowOuo(pageUrl, html, deadline, jar) {
   // cari form go-link
@@ -1055,7 +1199,6 @@ async function resolveUrl(raw, deadline, isManualContinue) {
   if (provider.fn === 'manual') {
     return { ok: false, needManual: true, provider: provider.name, manualUrl: first.url,
       reason: provider.reason || 'Link ini butuh verifikasi CAPTCHA manual.',
-      error: provider.reason || 'Link ini butuh verifikasi CAPTCHA manual.',
       chain: first.chain, ms: Date.now() - t0 };
   }
 
@@ -1085,7 +1228,6 @@ async function resolveUrl(raw, deadline, isManualContinue) {
     if (r && r.destination) return { ok: true, provider: provider.name, destination: r.destination, chain: [...chain, r.destination], ms: Date.now() - t0, method: 'form-post' };
     return { ok: false, needManual: true, provider: provider.name, manualUrl: pageUrl,
       reason: 'ShrinkMe diblokir Cloudflare dari server. Selesaikan manual di browser kamu.',
-      error: 'ShrinkMe diblokir Cloudflare dari server. Selesaikan manual di browser kamu.',
       chain, ms: Date.now() - t0 };
   }
   // v14: SubUnlock (subscribe to unlock) - simulasi klik task
@@ -1125,7 +1267,6 @@ async function resolveUrl(raw, deadline, isManualContinue) {
     // Kalau tidak bisa otomatis, jelaskan dengan jelas
     return { ok: false, needManual: true, provider: provider.name, manualUrl: pageUrl,
       reason: 'Link ini tipe "Subscribe to Unlock" - kamu harus subscribe channel YouTube-nya dulu di browser, baru link download-nya kebuka.',
-      error: 'Link ini tipe "Subscribe to Unlock" - kamu harus subscribe channel YouTube-nya dulu di browser, baru link download-nya kebuka.',
       chain, ms: Date.now() - t0 };
   }
 
@@ -1141,6 +1282,14 @@ async function resolveUrl(raw, deadline, isManualContinue) {
       return { ok: true, provider: provider.name + ' (Auto-Learned)', destination: learned.destination,
         chain: [...chain, learned.destination], ms: Date.now() - t0,
         method: learned.method, learnedPattern: learned.pattern };
+    }
+    // v17 BUTTON HUNTER (ide Tuan): buru tombol download/next berlapis-lapis
+    const hunt = await buttonHunterFlow(pageUrl, html, deadline, jar);
+    if (hunt && hunt.destination) {
+      learnPattern(hostOf(pageUrl), 'button-hunter', 'tombol download/next');
+      return { ok: true, provider: provider.name + ' (Button Hunter)', destination: hunt.destination,
+        chain: [...chain, hunt.destination], ms: Date.now() - t0,
+        method: 'button-hunter', steps: hunt.steps };
     }
   }
 
@@ -1202,7 +1351,6 @@ async function resolveUrl(raw, deadline, isManualContinue) {
     if (captchaResult && captchaResult.cloudflare) {
       return { ok: false, needManual: true, provider: provider.name, manualUrl: pageUrl,
         reason: 'Link ini dilindungi Cloudflare. Selesaikan verifikasinya manual di browser.',
-        error: 'Link ini dilindungi Cloudflare. Selesaikan verifikasinya manual di browser.',
         chain, ms: Date.now() - t0 };
     }
     if (captchaResult && captchaResult.solved && captchaResult.destination) {
