@@ -1321,6 +1321,10 @@ async function resolveUrl(raw, deadline, isManualContinue) {
       return { ok: true, provider: provider.name + ' (Button Hunter)', destination: lhunt.destination,
         chain: [...chain, lhunt.destination], ms: Date.now() - t0, method: 'button-hunter', steps: lhunt.steps };
     }
+    // v23: JANGAN tebak dari halaman linkvertise (isinya link sitemap/dll, bukan tujuan)
+    return { ok: false, needManual: true, provider: provider.name, manualUrl: pageUrl,
+      reason: 'Linkvertise butuh verifikasi browser. Buka linknya di Chrome, selesaikan hitung mundurnya, baru dapat link asli.',
+      chain, ms: Date.now() - t0 };
   }
 
   if (provider.fn === 'generic' || provider.name === 'Otomatis') {
