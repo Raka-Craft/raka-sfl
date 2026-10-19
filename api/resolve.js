@@ -937,6 +937,8 @@ async function flowLinkvertise(pageUrl, deadline) {
     try { await r2.arrayBuffer().catch(() => {}); } catch (e) {}
     const target = j2 && j2.data && (j2.data.target || (j2.data.link && j2.data.link.url));
     const v = target && validHttpUrl(target);
+    // v19: tolak kalau target balik ke linkvertise sendiri (sitemap / halaman salah)
+    if (v && /linkvertise\.com$/i.test(hostOf(v))) return null;
     return v ? { destination: v } : null;
   } catch (e) { return null; }
 }
@@ -968,22 +970,58 @@ async function safelinkuPost(url, body, referer, jar, deadline) {
 }
 /* ShrinkMe (shrinkme.click) — alur: cookie ref -> halaman mrproblogger -> tunggu counter -> POST /links/go.
    Best-effort: Cloudflare sering blokir IP datacenter. */
+// v18: fetch yang otomatis lolos Cloudflare "Just a moment" via Google Translate proxy
+async function fetchBypassCF(url, opts, ms, jar) {
+  let r = await fetchT(url, opts, ms);
+  let ct = (r.headers.get('content-type') || '').toLowerCase();
+  if (ct.includes('html')) {
+    const h = await r.text().catch(() => '');
+    try { await r.arrayBuffer().catch(() => {}); } catch (e) {}
+    if (h && !h.includes('Just a moment') && !h.includes('challenges.cloudflare.com')) {
+      // Bungkus ulang agar bisa dibaca seperti response biasa
+      return { ok: true, html: h, headers: r.headers, via: 'direct' };
+    }
+  } else {
+    try { await r.arrayBuffer().catch(() => {}); } catch (e) {}
+  }
+  // Kena Cloudflare -> coba Google Translate proxy
+  try {
+    const u = new URL(url);
+    const gtHost = u.hostname.replace(/\./g, '-') + '.translate.goog';
+    const sep = u.search ? '&' : '?';
+    const gtUrl = 'https://' + gtHost + u.pathname + u.search + sep + '_x_tr_sl=en&_x_tr_tl=id&_x_tr_hl=id';
+    const r2 = await fetchT(gtUrl, { redirect: 'manual', headers: baseHeaders(jar) }, ms);
+    const ct2 = (r2.headers.get('content-type') || '').toLowerCase();
+    storeCookies(jar, r2.headers);
+    if (ct2.includes('html')) {
+      const h2 = await r2.text().catch(() => '');
+      try { await r2.arrayBuffer().catch(() => {}); } catch (e) {}
+      if (h2 && h2.length > 1000 && !h2.includes('Just a moment')) {
+        return { ok: true, html: h2, headers: r2.headers, via: 'gtranslate' };
+      }
+    }
+    try { await r2.arrayBuffer().catch(() => {}); } catch (e) {}
+  } catch (e) {}
+  return { ok: false };
+}
+
 async function flowShrinkme(pageUrl, html, deadline, jar) {
   try {
     const u = new URL(pageUrl);
     const alias = u.pathname.replace(/\//g, '');
     if (!alias) return null;
-    // 1) tanam cookie via shrinkme.click
-    const r1 = await fetchT('https://shrinkme.click/' + alias, { headers: baseHeaders(jar) }, 8000);
-    storeCookies(jar, r1.headers);
-    try { await r1.text(); } catch (e) {}
-    // 2) halaman form (butuh Referer khusus)
-    const r2 = await fetchT('https://en.mrproblogger.com/' + alias, {
+    // 1) tanam cookie via shrinkme.click (v18: otomatis lolos Cloudflare)
+    const b1 = await fetchBypassCF('https://shrinkme.click/' + alias, { headers: baseHeaders(jar) }, 8000, jar);
+    if (!b1.ok) return null;
+    storeCookies(jar, b1.headers);
+    // 2) halaman form (butuh Referer khusus, v18: otomatis lolos Cloudflare)
+    const b2 = await fetchBypassCF('https://en.mrproblogger.com/' + alias, {
       headers: { ...baseHeaders(jar), 'Referer': 'https://themezon.net/' },
-    }, 8000);
-    storeCookies(jar, r2.headers);
-    const h2 = await r2.text().catch(() => '');
-    if (!h2 || h2.includes('Just a moment')) return null;
+    }, 8000, jar);
+    if (!b2.ok) return null;
+    storeCookies(jar, b2.headers);
+    const h2 = b2.html;
+    if (!h2) return null;
     // 3) parse form#go-link
     const fm = h2.match(/<form[^>]*id=["']go-link["'][^>]*>/i);
     if (!fm) return null;
