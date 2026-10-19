@@ -949,8 +949,7 @@ async function safelinkuPost(url, body, referer, jar, deadline) {
     return j;
   } catch (e) { return null; }
 }
-/* ShrinkMe (shrinkme.click) — alur: cookie ref -> halaman mrproblogger -> tunggu counter -> POST /links/go.
-   Best-effort: Cloudflare sering blokir IP datacenter. */
+/* ShrinkMe: cookie -> form -> counter -> POST /links/go */
 // v18: fetch yang otomatis lolos Cloudflare "Just a moment" via Google Translate proxy
 async function fetchBypassCF(url, opts, ms, jar) {
   let r = await fetchT(url, opts, ms);
@@ -991,11 +990,11 @@ async function flowShrinkme(pageUrl, html, deadline, jar) {
     const u = new URL(pageUrl);
     const alias = u.pathname.replace(/\//g, '');
     if (!alias) return null;
-    // 1) tanam cookie via shrinkme.click (v18: otomatis lolos Cloudflare)
+    // 1) cookie (v18: lolos CF)
     const b1 = await fetchBypassCF('https://shrinkme.click/' + alias, { headers: baseHeaders(jar) }, 8000, jar);
     if (!b1.ok) return null;
     storeCookies(jar, b1.headers);
-    // 2) halaman form (butuh Referer khusus, v18: otomatis lolos Cloudflare)
+    // 2) form (v18: lolos CF)
     const b2 = await fetchBypassCF('https://en.mrproblogger.com/' + alias, {
       headers: { ...baseHeaders(jar), 'Referer': 'https://themezon.net/' },
     }, 8000, jar);
@@ -1015,7 +1014,7 @@ async function flowShrinkme(pageUrl, html, deadline, jar) {
       const vm = m[0].match(/value=["']([^"']*)["']/i);
       inputs[m[1]] = vm ? vm[1] : '';
     }
-    // 4) tunggu counter (server menolak kalau terlalu cepat)
+    // 4) tunggu counter
     const cm = h2.match(/counter_value\s*[=:]\s*["']?(\d+)/i);
     const waitS = Math.min(parseInt(cm ? cm[1] : '11', 10) || 11, 15);
     await new Promise(r => setTimeout(r, waitS * 1000));
@@ -1260,7 +1259,7 @@ async function resolveUrl(raw, deadline, isManualContinue) {
         if (um) {
           const dest0 = validHttpUrl(um[1].replace(/\\/g, ''));
           if (dest0 && hostOf(dest0) !== hostOf(pageUrl)) {
-            // v20: kalau destinasi masih shortener (mis. sfl.gl), resolve rekursif
+            // v20: destinasi masih shortener -> rekursif
             const dh = hostOf(dest0);
             const isShort = PROVIDERS.some(p => p.hosts.some(h => dh === h || dh.endsWith('.' + h)));
             if (isShort && Date.now() < deadline - 8000) {
@@ -1318,6 +1317,12 @@ async function resolveUrl(raw, deadline, isManualContinue) {
   if (provider.fn === 'linkvertise') {
     const r = await flowLinkvertise(pageUrl, deadline);
     if (r) return { ok: true, provider: provider.name, destination: r.destination, chain: [...chain, r.destination], ms: Date.now() - t0, method: 'api' };
+    // v21: API gagal -> coba button hunter di halaman linkvertise
+    const lhunt = await buttonHunterFlow(pageUrl, html, deadline, jar);
+    if (lhunt && lhunt.destination) {
+      return { ok: true, provider: provider.name + ' (Button Hunter)', destination: lhunt.destination,
+        chain: [...chain, lhunt.destination], ms: Date.now() - t0, method: 'button-hunter', steps: lhunt.steps };
+    }
   }
 
   // v10 AUTO-LEARNING: untuk provider tidak dikenal / generic, pelajari polanya
