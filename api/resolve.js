@@ -704,6 +704,7 @@ const HUNT_WORDS = [
  [/get\s*link|dapatkan/i, 85],
  [/continue|lanjut/i, 80],
  [/\bnext\b|berikut/i, 75],
+ [/go\s*to\s*link|open\s*link/i, 88],
  [/skip|lewati/i, 70],
  [/proceed/i, 65],
  [/verify|verifikasi/i, 40],
