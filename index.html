@@ -13,7 +13,7 @@
   html, body { min-height: 100%; }
   body {
     font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
-    background: #09090b; color: #fafafa;
+    background: var(--bgc, #09090b); color: #fafafa;
     padding: 0 16px 130px; overflow-x: hidden;
     transition: background .4s, color .4s;
   }
@@ -536,6 +536,16 @@ function loadCfg() {
 function saveCfg() { localStorage.setItem('rb_cfg', JSON.stringify(cfg)); }
 function applyCfg() {
   document.body.style.setProperty('--bgc', cfg.bg);
+  const gl = document.querySelector('.bg-glow');
+  if (gl) {
+    if (cfg.theme === 'light') { gl.style.background = ''; }
+    else {
+      let n = parseInt((cfg.bg || '#09090b').slice(1), 16);
+      let r = (n >> 16 & 255), g = (n >> 8 & 255), b = (n & 255);
+      r = Math.round(r + (255 - r) * .35); g = Math.round(g + (255 - g) * .35); b = Math.round(b + (255 - b) * .35);
+      gl.style.background = 'radial-gradient(ellipse, rgba(' + r + ',' + g + ',' + b + ',.30), transparent 70%)';
+    }
+  }
   document.body.classList.toggle('light', cfg.theme === 'light');
   $('bgCustom').value = cfg.bg; $('glType').value = cfg.glType;
   $('glColor').value = cfg.glColor; $('glCount').value = String(cfg.glCount);
