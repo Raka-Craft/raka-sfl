@@ -448,10 +448,12 @@
       <div class="set-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h2.026c2.606 0 4.724-2.118 4.724-4.724C22 6.5 17.5 2 12 2z"/></svg>Tampilan</div>
       <div class="set-row"><span class="set-ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>Tema</span>
         <select id="theme"><option value="dark">Gelap</option><option value="light">Terang</option></select></div>
-      <div class="set-row"><span class="set-ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>Warna latar</span>
-        <div class="swatches" id="bgSw"></div></div>
-      <div class="set-row"><span class="set-ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"/></svg>Warna custom</span>
-        <input type="color" id="bgCustom" value="#0a0a14"></div>
+      <div class="set-row"><span class="set-ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h2.026c2.606 0 4.724-2.118 4.724-4.724C22 6.5 17.5 2 12 2z"/></svg>Gradasi latar</span>
+        <button class="toggle" id="tgBgGrad" aria-label="gradasi latar"></button></div>
+      <div class="set-row"><span class="set-ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"/></svg>Warna gradasi 1</span>
+        <input type="color" id="bg1In" value="#ef4444"></div>
+      <div class="set-row"><span class="set-ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"/></svg>Warna gradasi 2</span>
+        <input type="color" id="bg2In" value="#3b82f6"></div>
       <div class="set-row"><span class="set-ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"/></svg>Jenis partikel</span>
         <select id="glType"><option value="star">Bintang</option><option value="snow">Salju</option>
         <option value="bubble">Gelembung</option><option value="off">Mati</option></select></div>
@@ -527,7 +529,9 @@ function nav(pg, el) {
 let cfg = {};
 function loadCfg() {
   try { cfg = JSON.parse(localStorage.getItem('rb_cfg') || '{}'); } catch (e) { cfg = {}; }
-  Object.assign(cfg, { bg: cfg.bg || '#09090b', glType: cfg.glType || 'star',
+  Object.assign(cfg, { bg: cfg.bg || '#09090b',
+    bgGradOn: cfg.bgGradOn === true, bg1: cfg.bg1 || '#ef4444', bg2: cfg.bg2 || '#3b82f6',
+    glType: cfg.glType || 'star',
     glColor: cfg.glColor || '#6366f1', glCount: cfg.glCount || 90,
     theme: cfg.theme || 'dark', autoCopy: cfg.autoCopy !== false,
     vibrate: cfg.vibrate !== false, cache: cfg.cache !== false });
@@ -535,25 +539,25 @@ function loadCfg() {
 }
 function saveCfg() { localStorage.setItem('rb_cfg', JSON.stringify(cfg)); }
 function applyCfg() {
-  document.body.style.setProperty('--bgc', cfg.bg);
   const gl = document.querySelector('.bg-glow');
-  if (gl) {
-    if (cfg.theme === 'light') { gl.style.background = ''; }
-    else {
-      let n = parseInt((cfg.bg || '#09090b').slice(1), 16);
-      let r = (n >> 16 & 255), g = (n >> 8 & 255), b = (n & 255);
-      r = Math.round(r + (255 - r) * .35); g = Math.round(g + (255 - g) * .35); b = Math.round(b + (255 - b) * .35);
-      gl.style.background = 'radial-gradient(ellipse, rgba(' + r + ',' + g + ',' + b + ',.30), transparent 70%)';
-    }
+  if (cfg.bgGradOn) {
+    document.body.style.background = 'linear-gradient(180deg, ' + cfg.bg1 + ', ' + cfg.bg2 + ')';
+    document.body.style.backgroundAttachment = 'fixed';
+    if (gl) gl.style.background = 'none';
+  } else {
+    document.body.style.background = '';
+    document.body.style.backgroundAttachment = '';
+    if (gl) gl.style.background = '';
   }
   document.body.classList.toggle('light', cfg.theme === 'light');
-  $('bgCustom').value = cfg.bg; $('glType').value = cfg.glType;
+  $('bg1In').value = cfg.bg1; $('bg2In').value = cfg.bg2;
+  $('tgBgGrad').classList.toggle('on', cfg.bgGradOn);
+  $('glType').value = cfg.glType;
   $('glColor').value = cfg.glColor; $('glCount').value = String(cfg.glCount);
   $('theme').value = cfg.theme;
   $('tgAutoCopy').classList.toggle('on', cfg.autoCopy);
   $('tgVibrate').classList.toggle('on', cfg.vibrate);
   $('tgCache').classList.toggle('on', cfg.cache);
-  document.querySelectorAll('.sw').forEach(s => s.classList.toggle('on', s.dataset.c === cfg.bg));
   mkParts();
 }
 function bindToggle(id, key) {
@@ -594,14 +598,9 @@ function drawT() {
   ctx.globalAlpha = 1;
   requestAnimationFrame(drawT);
 }
-const BG_COLORS = ['#09090b', '#141024', '#0a1a1a', '#1a0a12', '#101826', '#1c1206'];
-BG_COLORS.forEach(c => {
-  const d = document.createElement('div');
-  d.className = 'sw'; d.dataset.c = c; d.style.background = c;
-  d.onclick = () => { cfg.bg = c; applyCfg(); $('bgCustom').value = c; saveCfg(); };
-  $('bgSw').appendChild(d);
-});
-$('bgCustom').oninput = e => { cfg.bg = e.target.value; applyCfg(); saveCfg(); };
+$('tgBgGrad').onclick = () => { cfg.bgGradOn = !cfg.bgGradOn; applyCfg(); saveCfg(); };
+$('bg1In').oninput = e => { cfg.bg1 = e.target.value; cfg.bgGradOn = true; applyCfg(); saveCfg(); };
+$('bg2In').oninput = e => { cfg.bg2 = e.target.value; cfg.bgGradOn = true; applyCfg(); saveCfg(); };
 $('glType').onchange = e => { cfg.glType = e.target.value; saveCfg(); mkParts(); };
 $('glColor').oninput = e => { cfg.glColor = e.target.value; saveCfg(); };
 $('glCount').onchange = e => { cfg.glCount = +e.target.value; saveCfg(); mkParts(); };
