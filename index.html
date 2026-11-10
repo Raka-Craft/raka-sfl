@@ -67,7 +67,7 @@
   .hero-sm { text-align: center; padding: 28px 0 16px; }
   .hero h1, .hero-sm h1 { font-size: 29px; font-weight: 800; letter-spacing: -.6px; line-height: 1.3; }
   .hero-sm h1 { font-size: 24px; }
-  .grad { background: linear-gradient(92deg, #818cf8, #c084fc); -webkit-background-clip: text;
+  .grad { background: linear-gradient(92deg, var(--tx1, #818cf8), var(--tx2, #c084fc)); -webkit-background-clip: text;
     background-clip: text; color: transparent; }
   .lede { color: #a1a1aa; font-size: 14px; margin-top: 10px; line-height: 1.65; }
   body.light .lede { color: #64748b; }
@@ -286,7 +286,7 @@
   .set-row:last-child { border: none; }
   .set-ic { display: inline-flex; align-items: center; gap: 11px; color: #d4d4d8; }
   body.light .set-ic { color: #334155; }
-  .set-ic svg { color: #818cf8; }
+  .set-ic svg { color: var(--tx1, #818cf8); }
   .swatches { display: flex; gap: 9px; flex-wrap: wrap; }
   .sw { width: 32px; height: 32px; border-radius: 50%; cursor: pointer;
     border: 2px solid transparent; transition: all .2s; }
@@ -538,15 +538,25 @@ function loadCfg() {
   applyCfg();
 }
 function saveCfg() { localStorage.setItem('rb_cfg', JSON.stringify(cfg)); }
+function lightenHex(hex, f) {
+  let n = parseInt((hex || '#000000').slice(1), 16);
+  let r = (n >> 16 & 255), g = (n >> 8 & 255), b = (n & 255);
+  r = Math.round(r + (255 - r) * f); g = Math.round(g + (255 - g) * f); b = Math.round(b + (255 - b) * f);
+  return 'rgb(' + r + ',' + g + ',' + b + ')';
+}
 function applyCfg() {
   const gl = document.querySelector('.bg-glow');
   if (cfg.bgGradOn) {
     document.body.style.background = 'linear-gradient(180deg, ' + cfg.bg1 + ', ' + cfg.bg2 + ')';
     document.body.style.backgroundAttachment = 'fixed';
+    document.body.style.setProperty('--tx1', lightenHex(cfg.bg1, .55));
+    document.body.style.setProperty('--tx2', lightenHex(cfg.bg2, .55));
     if (gl) gl.style.background = 'none';
   } else {
     document.body.style.background = '';
     document.body.style.backgroundAttachment = '';
+    document.body.style.removeProperty('--tx1');
+    document.body.style.removeProperty('--tx2');
     if (gl) gl.style.background = '';
   }
   document.body.classList.toggle('light', cfg.theme === 'light');
