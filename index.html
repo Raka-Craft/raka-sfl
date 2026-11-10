@@ -39,7 +39,7 @@
   /* top app bar */
   .appbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center;
     justify-content: space-between; padding: 13px 2px; margin: 0 -2px;
-    background: rgba(9,9,11,.72); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    background: var(--barBg, rgba(9,9,11,.72)); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
     border-bottom: 1px solid rgba(255,255,255,.06); }
   body.light .appbar { background: rgba(248,250,252,.78); border-color: #e2e8f0; }
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: 1.6px; font-size: 14px; }
@@ -311,7 +311,7 @@
   .bottomnav { position: fixed; bottom: calc(14px + env(safe-area-inset-bottom)); left: 50%;
     transform: translateX(-50%); width: min(430px, calc(100% - 28px)); z-index: 30;
     display: flex; gap: 4px; padding: 7px; border-radius: 26px;
-    background: rgba(18,18,22,.8); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+    background: var(--dockBg, rgba(18,18,22,.8)); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
     border: 1px solid rgba(255,255,255,.1); box-shadow: 0 14px 44px rgba(0,0,0,.55); }
   body.light .bottomnav { background: rgba(255,255,255,.85); border-color: #e2e8f0;
     box-shadow: 0 14px 44px rgba(15,23,42,.12); }
@@ -557,6 +557,9 @@ function applyCfg() {
     let rgb2 = (n2 >> 16 & 255) + ',' + (n2 >> 8 & 255) + ',' + (n2 & 255);
     document.body.style.setProperty('--accRGB', rgb2);
     document.body.style.setProperty('--inpBg', 'rgba(' + rgb2 + ',.30)');
+    document.body.style.setProperty('--barBg', 'rgba(' + rgb2 + ',.55)');
+    let n3 = parseInt(cfg.bg2.slice(1), 16);
+    document.body.style.setProperty('--dockBg', 'rgba(' + (n3 >> 16 & 255) + ',' + (n3 >> 8 & 255) + ',' + (n3 & 255) + ',.45)');
     if (gl) gl.style.background = 'none';
   } else {
     document.body.style.background = '';
@@ -567,6 +570,8 @@ function applyCfg() {
     document.body.style.removeProperty('--acc2');
     document.body.style.removeProperty('--accRGB');
     document.body.style.removeProperty('--inpBg');
+    document.body.style.removeProperty('--barBg');
+    document.body.style.removeProperty('--dockBg');
     if (gl) gl.style.background = '';
   }
   document.body.classList.toggle('light', cfg.theme === 'light');
