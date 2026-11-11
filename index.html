@@ -557,9 +557,8 @@ function applyCfg() {
     let rgb2 = (n2 >> 16 & 255) + ',' + (n2 >> 8 & 255) + ',' + (n2 & 255);
     document.body.style.setProperty('--accRGB', rgb2);
     document.body.style.setProperty('--inpBg', 'rgba(' + rgb2 + ',.30)');
-    document.body.style.setProperty('--barBg', 'rgba(' + rgb2 + ',.55)');
-    let n3 = parseInt(cfg.bg2.slice(1), 16);
-    document.body.style.setProperty('--dockBg', 'rgba(' + (n3 >> 16 & 255) + ',' + (n3 >> 8 & 255) + ',' + (n3 & 255) + ',.45)');
+    document.body.style.setProperty('--barBg', 'rgba(' + rgb2 + ',.85)');
+    document.body.style.setProperty('--dockBg', 'linear-gradient(90deg, ' + cfg.bg1 + ', ' + cfg.bg2 + ')');
     if (gl) gl.style.background = 'none';
   } else {
     document.body.style.background = '';
@@ -827,13 +826,13 @@ async function bypassOne(u) {
 }
 async function runBypass(list) {
   $('homeRes').innerHTML = '';
-  lastFail = null;
   $('procBox').style.display = 'block';
   $('procBox').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   stepsStart();
   for (const u of list) {
     const cached = getCache(u);
     if (cached) {
+      setLastTry(u, true);
       $('homeRes').appendChild(resCard(u, cached, true));
       saveHist(u, cached.finalUrl || cached.destination);
       stats(true, 0); buzz(); autoCopyTxt(cached.finalUrl || cached.destination);
@@ -843,13 +842,13 @@ async function runBypass(list) {
       const d = await bypassOne(u);
       stats(d.ok, d.ms);
       if (d.ok) {
+        setLastTry(u, true);
         const show = d.finalUrl || d.destination;
         setCache(u, d); saveHist(u, show);
         $('homeRes').appendChild(resCard(u, d, false));
         buzz(); autoCopyTxt(show);
       } else {
-        lastFail = { src: u, error: d.error || 'Gagal' };
-        renderChips();
+        setLastTry(u, false, d.error || 'Gagal');
         const e = document.createElement('div');
         e.className = 'card err-card';
         e.innerHTML = '<div class="err-msg">' + ic('alert', 18) + '<span>' +
@@ -860,6 +859,7 @@ async function runBypass(list) {
       }
     } catch (e) {
       stats(false);
+      setLastTry(u, false, 'Tidak bisa menghubungi server bypass');
       stepsDone(false);
     }
   }
@@ -884,7 +884,18 @@ $('url').addEventListener('keydown', e => { if (e.key === 'Enter') $('go').click
 })();
 /* ===== AI CHAT ===== */
 let chatHist = [];
-let lastFail = null;
+let lastTry = null;
+function hostOf(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return u; } }
+function setLastTry(u, ok, err) {
+  lastTry = { u: u, host: hostOf(u), ok: !!ok, err: err || '', t: Date.now() };
+  try { localStorage.setItem('rb_last', JSON.stringify(lastTry)); } catch (e) {}
+  renderChips();
+}
+function getLastTry() {
+  if (lastTry) return lastTry;
+  try { lastTry = JSON.parse(localStorage.getItem('rb_last') || 'null'); } catch (e) { lastTry = null; }
+  return lastTry;
+}
 function navAI(el) {
   nav('pg-ai', el);
   if (!chatHist.length) {
@@ -893,7 +904,8 @@ function navAI(el) {
   }
 }
 function renderChips() {
-  const qs = lastFail
+  const lt = getLastTry();
+  const qs = (lt && !lt.ok)
     ? ['Kenapa link tadi gagal?', 'Gimana cara bypass yang benar?', 'Apa itu SafelinkU?']
     : ['Gimana cara pakai aplikasi ini?', 'Link apa saja yang didukung?', 'Kenapa bypass bisa gagal?'];
   $('chips').innerHTML = qs.map(q =>
@@ -923,7 +935,11 @@ async function askAI(text) {
   $('chatBox').appendChild(tp);
   $('chatBox').scrollTop = $('chatBox').scrollHeight;
   try {
-    const ctx = lastFail ? ('Bypass terakhir GAGAL. Link: ' + lastFail.src + '. Pesan error: ' + lastFail.error) : 'Belum ada bypass gagal baru-baru ini.';
+    const lt = getLastTry();
+    let ctx;
+    if (!lt) ctx = 'Pengguna BELUM pernah bypass apa pun di aplikasi ini. Kalau dia bertanya kenapa bypass-nya gagal, jelaskan penyebab gagal yang umum saja.';
+    else if (lt.ok) ctx = 'Percobaan bypass TERAKHIR pengguna: BERHASIL. Link: ' + String(lt.u).slice(0, 90) + ' (layanan: ' + lt.host + '). Kalau pengguna bertanya kenapa bypass-nya gagal, sampaikan bypass terakhirnya (' + lt.host + ') justru BERHASIL, lalu jelaskan penyebab gagal yang umum untuk jaga-jaga.';
+    else ctx = 'Percobaan bypass TERAKHIR pengguna: GAGAL. Link: ' + String(lt.u).slice(0, 90) + ' (layanan: ' + lt.host + '). Penyebab tercatat dari aplikasi: "' + lt.err + '". Kalau pengguna bertanya kenapa bypass-nya gagal, jawab tentang percobaan INI: sebut layanannya (' + lt.host + '), jelaskan penyebabnya dengan bahasa sederhana, kasih solusi singkat.';
     let statTxt = '';
     try {
       const s = JSON.parse(localStorage.getItem('rb_stat') || '{"total":0,"ok":0}');
