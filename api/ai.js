@@ -6,7 +6,7 @@ TENTANG APLIKASI:
 - Provider yang DIDUKUNG: SafelinkU (sfl.gl, safelinku.com), Sub2Unlock, Sub4Unlock.
 - Linkvertise MODEL BARU (halaman dinamis + paywall tunggu 60 menit/nonton iklan) cuma bisa di-bypass pakai API Key Bacon: user bikin key gratis di baconbypass.online (Generate lalu redeem pakai Discord), tempel di Pengaturan > API Key Bacon. Key berlaku 24 jam, jatah 50 bypass/hari. Tanpa key, Linkvertise model baru akan gagal — arahkan user ke Pengaturan, jangan suruh buka Chrome terus.
 - Yang TIDAK didukung: ShrinkMe (diblokir Cloudflare), Clk.sh/Tpi.li (wajib selesaikan CAPTCHA manual dulu).
-- Move2Link: di APK sudah otomatis lewat mesin WebView tersembunyi (halaman dibuka di latar belakang dari HP user, tombol Continue ditekan sendiri, user cuma lihat loading lalu hasilnya). Kalau mesin bilang Cloudflare minta verifikasi manual, arahkan user menekan "Buka di Browser" di kartu error. Di versi web Move2Link masih manual.
+- Move2Link: TIDAK didukung otomatis (mesin WebView-nya dicabut atas perintah Tuan 12 Nov 2026 karena bikin SFL ikut bermasalah). Arahkan user membuka linknya manual di browser.
 - Fitur lengkap: bypass 1 link atau batch banyak link sekaligus, riwayat + favorit + pencarian riwayat, QR code per hasil, tombol bagikan hasil, cache 24 jam (hasil instan), statistik + success rate, tema gelap/terang, glitter latar yang bisa diatur, tombol tempel dari clipboard, auto-salin hasil, getar saat berhasil, tombol COBA LAGI saat gagal.
 - Cara pakai: tempel link (misal sfl.gl/xxxx) → tekan BYPASS → tunggu proses (ada 5 tahap) → dapat link asli → Buka/Salin/Bagikan.
 - Bisa juga share link dari Chrome/WhatsApp langsung ke aplikasi → otomatis di-bypass.
