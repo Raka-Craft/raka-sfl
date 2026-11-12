@@ -1313,13 +1313,16 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  const r = await flowOuo(pageUrl, html, deadline, jar);
  if (r) return { ok: true, provider: provider.name, destination: r.destination, chain: [...chain, r.destination], ms: Date.now() - t0, method: 'form-post' };
  }
+ let sflDbg = null;
  if (provider.fn === 'safelinku') {
  const r = await flowSafelinku(pageUrl, html, deadline, jar);
  if (r && r.destination) return { ok: true, provider: provider.name, destination: r.destination, chain: [...chain, r.destination], ms: Date.now() - t0, method: 'safelinku' };
+ if (r && r._dbg) sflDbg = r._dbg;
  }
  if (provider.fn !== 'safelinku' && /<form[^>]*action\s*=\s*"[^"]*redirect\.php/i.test(html) && /name=["']ray_id["']/i.test(html)) {
  const r = await flowSafelinku(pageUrl, html, deadline, jar);
  if (r && r.destination) return { ok: true, provider: 'SafelinkU (klon)', destination: r.destination, chain: [...chain, r.destination], ms: Date.now() - t0, method: 'safelinku-clone' };
+ if (r && r._dbg) sflDbg = r._dbg;
  }
  if (provider.fn === 'shrinkme') {
  const r = await flowShrinkme(pageUrl, html, deadline, jar);
@@ -1473,7 +1476,7 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  }
  }
 
- return { ok: false, provider: provider.name, error: 'Tidak bisa menemukan link asli. Situs ini mungkin butuh JavaScript/browser.', chain, ms: Date.now() - t0 };
+ return { ok: false, provider: provider.name, error: 'Tidak bisa menemukan link asli. Situs ini mungkin butuh JavaScript/browser.', chain, ms: Date.now() - t0, debug: { htmlLen: (html || '').length, htmlHead: (html || '').slice(0, 200), cf: isCloudflare(html), sflDbg, pageUrl } };
 }
 
 module.exports = async (req, res) => {
