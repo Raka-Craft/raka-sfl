@@ -668,6 +668,19 @@ function stats(ok, ms) {
     localStorage.setItem('rb_stat', JSON.stringify(s)); loadStats();
   } catch (e) {}
 }
+/* Sekali saja (v26): perbaiki angka lama yang kehitung ganda. Dulu setiap
+   bypass lewat mesin kehitung 2x (1 gagal dari server + 1 berhasil dari
+   mesin). Setiap 1 gagal hantu berpasangan dengan 1 berhasil, jadi hapus
+   gagal hantu sebanyak min(berhasil, gagal). */
+function fixStatsOnce() {
+  try {
+    if (localStorage.getItem('rb_stat_fix26')) return;
+    localStorage.setItem('rb_stat_fix26', '1');
+    const s = JSON.parse(localStorage.getItem('rb_stat') || '{"total":0,"ok":0,"ms":0}');
+    const hantu = Math.min(s.ok, s.total - s.ok);
+    if (hantu > 0) { s.total -= hantu; localStorage.setItem('rb_stat', JSON.stringify(s)); }
+  } catch (e) {}
+}
 function loadStats() {
   try {
     const s = JSON.parse(localStorage.getItem('rb_stat') || '{"total":0,"ok":0,"ms":0}');
@@ -879,8 +892,8 @@ async function runBypass(list) {
     }
     try {
       const d = await bypassOne(u);
-      stats(d.ok, d.ms);
       if (d.ok) {
+        stats(true, d.ms);
         setLastTry(u, true);
         const show = d.finalUrl || d.destination;
         setCache(u, d); saveHist(u, show);
@@ -931,6 +944,7 @@ async function runBypass(list) {
         }
         // Sampai sini berarti mesin gagal / tidak ada mesin: barulah ini gagal.
         hadError = true;
+        stats(false, d.ms);
         setLastTry(u, false, d.reason || d.error || 'Gagal');
         const e = document.createElement('div');
         e.className = 'card err-card';
@@ -1065,7 +1079,7 @@ $('chatIn').addEventListener('keydown', e => { if (e.key === 'Enter') askAI(); }
 // init
 sizeCv(); loadCfg(); requestAnimationFrame(drawT);
 addEventListener('resize', sizeCv);
-loadStats(); renderHist();
+fixStatsOnce(); loadStats(); renderHist();
 </script>
 </body>
 </html>
