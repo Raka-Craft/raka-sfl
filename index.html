@@ -337,7 +337,7 @@
   <div class="brand">
     <span class="logo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>
     <span>BYPASSPRO</span>
-    <span class="ver" id="verLabel">v17.0</span>
+    <span class="ver" id="verLabel">v18.0</span>
   </div>
   <div class="srv"><span class="sdot" id="srvDot"></span><span id="srvTxt">Menghubungkan...</span></div>
 </header>
@@ -634,9 +634,26 @@ $('theme').onchange = e => { cfg.theme = e.target.value; applyCfg(); saveCfg(); 
 bindToggle('tgAutoCopy', 'autoCopy'); bindToggle('tgVibrate', 'vibrate'); bindToggle('tgCache', 'cache');
 /* Label versi dari APK langsung (biar tidak basi seperti v13.0 kemarin). */
 try { if (window.AppInfo && typeof window.AppInfo.version === 'function') { const vv = window.AppInfo.version(); if (vv) $('verLabel').textContent = 'v' + vv; } } catch (e) {}
-/* Mesin WebView Move2Link DICABUT atas perintah Tuan (12 Nov 2026): Move2Link
-   kembali ke kartu manual dari server. Jembatan EngineAPI di APK dibiarkan
-   menganggur (tidak dipanggil lagi). */
+/* ===== MESIN WEBVIEW (fallback CAPTCHA, hanya di APK) ===== */
+/* Mesin khusus Move2Link dicabut di v16 (12 Nov 2026). Di v18 mesin kembali
+   sebagai fallback CAPTCHA UMUM atas perintah Tuan ("captcha itu bisa banget
+   kamu selesain... diulang terus menerus sampai selesai"): saat server bilang
+   "butuh manual", mesin membuka halaman di WebView tersembunyi, mengetuk
+   checkbox Turnstile, menekan tombol Continue, dan memuat ulang sampai 3x
+   kalau macet. Hanya jalan untuk link yang servernya sudah menyerah — SFL
+   dan yang lain tidak pernah lewat sini. */
+function engineViaNative(u) {
+  return new Promise((resolve) => {
+    let done = false;
+    const to = setTimeout(() => { if (!done) { done = true; resolve({ status: 'error', code: 'ERR_TIMEOUT' }); } }, 90000);
+    window.__engineCb = function (s) {
+      if (done) return; done = true; clearTimeout(to);
+      try { resolve(JSON.parse(s)); } catch (e) { resolve({ status: 'error', code: 'ERR_BADJSON' }); }
+    };
+    try { window.EngineAPI.resolve(u, 'window.__engineCb'); }
+    catch (e) { if (!done) { done = true; clearTimeout(to); resolve({ status: 'error', code: 'ERR_NATIVE' }); } }
+  });
+}
 /* ===== TABS ===== */
 function setTab(n) {
   $('tab1').classList.toggle('on', n === 1); $('tab2').classList.toggle('on', n === 2);
@@ -887,12 +904,37 @@ async function runBypass(list) {
         }
         buzz(); autoCopyTxt(show);
       } else {
-        setLastTry(u, false, d.error || 'Gagal');
+        if (d.needManual && window.EngineAPI && typeof window.EngineAPI.resolve === 'function') {
+          const busy = document.createElement('div');
+          busy.className = 'card';
+          busy.innerHTML = '<div style="font-size:13px;color:#e4e4e7">Mesin lagi nyoba CAPTCHA-nya... (ketuk + coba ulang otomatis, bisa sampai 1 menit)</div>';
+          $('homeRes').appendChild(busy);
+          const eg = await engineViaNative(u);
+          busy.remove();
+          if (eg && eg.status === 'success' && eg.result) {
+            setLastTry(u, true);
+            const dd = { ok: true, finalUrl: eg.result };
+            setCache(u, dd); saveHist(u, eg.result);
+            $('homeRes').appendChild(resCard(u, dd, false));
+            buzz(); autoCopyTxt(eg.result);
+            stats(true, 0);
+            continue;
+          }
+          // Mesin gagal -> jatuh ke kartu manual di bawah.
+        }
+        setLastTry(u, false, d.reason || d.error || 'Gagal');
         const e = document.createElement('div');
         e.className = 'card err-card';
-        e.innerHTML = '<div class="err-msg">' + ic('alert', 18) + '<span>' +
-          esc(d.error || 'Gagal') + '</span></div>' +
-          '<button class="btn primary">' + ic('refresh', 17) + 'Coba Lagi</button>';
+        if (d.needManual) {
+          e.innerHTML = '<div class="err-msg">' + ic('alert', 18) + '<span>' +
+            esc(d.reason || 'Link ini butuh verifikasi manual.') + '</span></div>' +
+            '<div class="act-row"><a class="act main" target="_blank" rel="noopener" href="' + esc(d.manualUrl || u) + '">Buka di Browser</a></div>' +
+            '<button class="btn primary">' + ic('refresh', 17) + 'Coba Lagi</button>';
+        } else {
+          e.innerHTML = '<div class="err-msg">' + ic('alert', 18) + '<span>' +
+            esc(d.error || 'Gagal') + '</span></div>' +
+            '<button class="btn primary">' + ic('refresh', 17) + 'Coba Lagi</button>';
+        }
         e.querySelector('button').onclick = () => runBypass([u]);
         $('homeRes').appendChild(e);
       }

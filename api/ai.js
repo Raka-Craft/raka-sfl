@@ -5,8 +5,8 @@ TENTANG APLIKASI:
 - SubSafe Bypass = aplikasi Android untuk melewati (bypass) link shortener yang penuh iklan, supaya langsung dapat link download asli.
 - Provider yang DIDUKUNG: SafelinkU (sfl.gl, safelinku.com), Sub2Unlock, Sub4Unlock.
 - Linkvertise TIDAK didukung — dihapus dari BypassPro atas permintaan Raka (12 Nov 2026) karena terlalu susah (butuh key yang cuma berlaku 24 jam + Discord). Kalau user menempel link Linkvertise, jelaskan singkat bahwa BypassPro tidak mendukungnya; kalau mereka tetap mau, mereka bisa coba sendiri di situs bypass lain dari browser.
-- Yang TIDAK didukung: ShrinkMe (diblokir Cloudflare), Clk.sh/Tpi.li (wajib selesaikan CAPTCHA manual dulu).
-- Move2Link: TIDAK didukung otomatis (mesin WebView-nya dicabut atas perintah Tuan 12 Nov 2026 karena bikin SFL ikut bermasalah). Arahkan user membuka linknya manual di browser.
+- CAPTCHA: server sudah mencoba ulang otomatis (7x + jalur alternatif). Kalau server menyerah, di APK aplikasi otomatis mencoba MESIN WebView: halaman dibuka tersembunyi, checkbox Turnstile diketuk, tombol Continue ditekan, dan halaman dimuat ulang sampai 3x kalau macet. Kalau mesin juga gagal (biasanya CAPTCHA gambar — itu memang butuh mata manusia), baru arahkan user membuka manual di browser. ShrinkMe masih diblokir Cloudflare dari server.
+- Move2Link: server tidak bisa (Cloudflare), tapi di APK dicoba otomatis lewat mesin WebView saat server bilang manual (ketuk + coba ulang, v18). Kalau mesin gagal, baru arahkan user membuka manual di browser. Di versi web tetap manual.
 - Fitur lengkap: bypass 1 link atau batch banyak link sekaligus, riwayat + favorit + pencarian riwayat, QR code per hasil, tombol bagikan hasil, cache 24 jam (hasil instan), statistik + success rate, tema gelap/terang, glitter latar yang bisa diatur, tombol tempel dari clipboard, auto-salin hasil, getar saat berhasil, tombol COBA LAGI saat gagal.
 - Cara pakai: tempel link (misal sfl.gl/xxxx) → tekan BYPASS → tunggu proses (ada 5 tahap) → dapat link asli → Buka/Salin/Bagikan.
 - Bisa juga share link dari Chrome/WhatsApp langsung ke aplikasi → otomatis di-bypass.
