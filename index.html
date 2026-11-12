@@ -955,7 +955,8 @@ async function runBypass(list) {
         stats(false, 0);
         const eb = document.createElement('div');
         eb.className = 'card err-card';
-        eb.innerHTML = '<div class="err-msg">' + ic('alert', 18) + '<span>' + esc(em) + '</span></div>' +
+        const trailHtml = (eg && eg.trail) ? '<div style="font-size:11px;color:#a1a1aa;margin-top:6px;word-break:break-all">Jejak mesin: ' + esc(eg.trail) + '</div>' : '';
+        eb.innerHTML = '<div class="err-msg">' + ic('alert', 18) + '<span>' + esc(em) + '</span></div>' + trailHtml +
           '<div class="act-row"><a class="act main" target="_blank" rel="noopener" href="' + esc(u) + '">Buka di Browser</a></div>' +
           '<button class="btn primary">' + ic('refresh', 17) + 'Coba Lagi</button>';
         eb.querySelector('button').onclick = () => runBypass([u]);
