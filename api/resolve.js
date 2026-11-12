@@ -181,7 +181,7 @@ function base64Candidates(html) {
 
 const AD_DOMAINS = ['google', 'facebook', 'doubleclick', 'googlesyndication', 'analytics', 'adsystem', 'adservice', 'taboola', 'outbrain', 'mgid', 'revcontent', 'popads', 'popcash', 'adcash', 'propeller', 'exoclick', 'adnxs', 'criteo', 'hotjar', 'cloudflare', 'hcaptcha', 'recaptcha', 'gstatic', 'schema.org', 'w3.org', 'youtube.com', 'youtu.be'];
 
-const FILE_HOSTS=['mediafire.com','apkadmin'+'.com','drive.google.com','github.com','mega'+'.nz','pixeldrain'+'.com','gofile'+'.io','krakenfiles'+'.com','buzzheavier'+'.com','uptobox'+'.com','1fichier'+'.com','send'+'.cm','usersdrive'+'.com','dropbox'+'.com'];
+const FILE_HOSTS=['mediafire.com','apkadmin'+'.com','drive.google.com','github.com','mega'+'.nz','pixeldrain'+'.com','gofile'+'.io','krakenfiles'+'.com','buzzheavier'+'.com','uptobox'+'.com','1fichier'+'.com','send'+'.cm','usersdrive'+'.com','dropbox'+'.com','vikingfile'+'.com','vik1ngfile'+'.site'];
 const MEDIAFIRE_FIRST = true;
 
 function isSuspiciousAdHost(host) {
