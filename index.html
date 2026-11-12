@@ -690,6 +690,25 @@ $('baconKeyIn').value = getBaconKey();
 baconStatus();
 $('baconSaveBtn').onclick = () => { const v = $('baconKeyIn').value.trim(); try { localStorage.setItem('rb_bacon', v); } catch (e) {} baconStatus(); };
 $('baconDelBtn').onclick = () => { try { localStorage.removeItem('rb_bacon'); } catch (e) {} $('baconKeyIn').value = ''; baconStatus(); };
+/* ===== MESIN WEBVIEW TERSEMBUNYI (Move2Link, hanya di APK) ===== */
+function isMove2Link(u) { return /move2link\.(co|com)$/i.test(hostOf(u)); }
+function engineViaNative(u) {
+  return new Promise((resolve) => {
+    let done = false;
+    const to = setTimeout(() => { if (!done) { done = true; resolve({ status: 'error', code: 'ERR_TIMEOUT' }); } }, 90000);
+    window.__engineCb = function (s) {
+      if (done) return; done = true; clearTimeout(to);
+      try { resolve(JSON.parse(s)); } catch (e) { resolve({ status: 'error', code: 'ERR_BADJSON' }); }
+    };
+    try { window.EngineAPI.resolve(u, 'window.__engineCb'); }
+    catch (e) { if (!done) { done = true; clearTimeout(to); resolve({ status: 'error', code: 'ERR_NATIVE' }); } }
+  });
+}
+function engineErrMsg(code) {
+  if (code === 'ERR_CF_STUCK') return 'Cloudflare Move2Link minta verifikasi manual yang cuma bisa diklik manusia. Buka linknya di browser lewat tombol di bawah.';
+  if (code === 'ERR_TIMEOUT') return 'Mesinnya kelamaan nunggu halaman Move2Link (lebih dari 75 detik). Coba lagi, atau buka manual di browser.';
+  return null;
+}
 /* ===== TABS ===== */
 function setTab(n) {
   $('tab1').classList.toggle('on', n === 1); $('tab2').classList.toggle('on', n === 2);
@@ -919,6 +938,31 @@ async function runBypass(list) {
         $('homeRes').appendChild(eb);
         continue;
       }
+    }
+    if (isMove2Link(u) && window.EngineAPI && typeof window.EngineAPI.resolve === 'function') {
+      const eg = await engineViaNative(u);
+      if (eg && eg.status === 'success' && eg.result) {
+        stats(true, 0);
+        const dd = { ok: true, finalUrl: eg.result };
+        setCache(u, dd); saveHist(u, eg.result); setLastTry(u, true);
+        $('homeRes').appendChild(resCard(u, dd, false));
+        buzz(); autoCopyTxt(eg.result);
+        continue;
+      }
+      const em = engineErrMsg(eg && eg.code);
+      if (em) {
+        setLastTry(u, false, em);
+        stats(false, 0);
+        const eb = document.createElement('div');
+        eb.className = 'card err-card';
+        eb.innerHTML = '<div class="err-msg">' + ic('alert', 18) + '<span>' + esc(em) + '</span></div>' +
+          '<div class="act-row"><a class="act main" target="_blank" rel="noopener" href="' + esc(u) + '">Buka di Browser</a></div>' +
+          '<button class="btn primary">' + ic('refresh', 17) + 'Coba Lagi</button>';
+        eb.querySelector('button').onclick = () => runBypass([u]);
+        $('homeRes').appendChild(eb);
+        continue;
+      }
+      // Error mesin lain (mis. jembatan gagal) -> jatuh ke server, yang akan membalas manual.
     }
     try {
       const d = await bypassOne(u);
