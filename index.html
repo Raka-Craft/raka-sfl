@@ -867,6 +867,7 @@ async function runBypass(list) {
   $('procBox').style.display = 'block';
   $('procBox').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   stepsStart();
+  let hadError = false;
   for (const u of list) {
     const cached = getCache(u);
     if (cached) {
@@ -904,6 +905,7 @@ async function runBypass(list) {
         }
         buzz(); autoCopyTxt(show);
       } else {
+        hadError = true;
         if (d.needManual && window.EngineAPI && typeof window.EngineAPI.resolve === 'function') {
           const busy = document.createElement('div');
           busy.className = 'card';
@@ -939,6 +941,7 @@ async function runBypass(list) {
         $('homeRes').appendChild(e);
       }
     } catch (e) {
+      hadError = true;
       stats(false);
       /* Dulu blok ini SUNYI (tanpa kartu apa-apa) — itu yang bikin Tuan bingung
          saat SFL gagal 12 Nov: langkah jadi merah tapi tidak ada hasil/error.
@@ -954,7 +957,7 @@ async function runBypass(list) {
       stepsDone(false);
     }
   }
-  stepsDone(true);
+  stepsDone(!hadError);
 }
 $('go').onclick = () => { const v = $('url').value.trim(); if (v) runBypass([v]); };
 $('goBatch').onclick = () => {

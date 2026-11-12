@@ -6,7 +6,7 @@ const PROVIDERS = [
  { hosts: ['ouo.io', 'ouo.press'], name: 'Ouo.io', fn: 'ouo' },
  { hosts: ['exe.io', 'exeo.app'], name: 'Exe.io', fn: 'ouoLike' },
  { hosts: ['linkvertise.com', 'linkvertise.net'], name: 'Linkvertise', fn: 'manual', reason: 'Linkvertise tidak didukung di BypassPro (dihapus atas permintaan Raka — terlalu susah, butuh key yang cuma berlaku 24 jam).' },
- { hosts: ['sfl.gl', 'safelinku.com'], name: 'SafelinkU', fn: 'safelinku' },
+ { hosts: ['sfl.gl', 'safelinku.com', 'besargaji.com', 'bahasteknologi.com'], name: 'SafelinkU', fn: 'safelinku' },
  { hosts: ['sub4unlock.com', 'sub4unlock.co', 'sub4unlock.io', 'sub2unlock.com', 'unlocksubs.com'], name: 'SubUnlock', fn: 'subunlock' },
  { hosts: ['clk.sh','oko.sh','oii.la','clksz.com'], name: 'Clk.sh', fn: 'manual', reason: 'Clk.sh wajib verifikasi CAPTCHA (Cloudflare Turnstile) yang cuma bisa diselesaikan manusia.' },
  { hosts: ['bit.ly','bitly.is','j.mp','amzn.to'], name: 'Bitly', fn: 'generic' },
@@ -1265,7 +1265,18 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  chain: [...first.chain, gc[0]], ms: Date.now() - t0, method: 'redirect+deep' };
  }
  }
+ const destProv = detectProvider(hostOf(dest));
+ if (destProv.name === 'Otomatis') {
  return { ok: true, provider: provider.name, destination: dest, chain: first.chain, ms: Date.now() - t0, method: 'redirect' };
+ }
+ // Dest masih shortener terkenal -> resolve berantai, jangan klaim sukses palsu.
+ if (destProv.fn !== 'manual' && Date.now() < deadline - 8000) {
+ const sub = await resolveUrl(dest, deadline, false);
+ if (sub && sub.ok && sub.destination) {
+ return { ok: true, provider: provider.name + ' → ' + sub.provider, destination: sub.destination, chain: [...first.chain, ...sub.chain.slice(1)], ms: Date.now() - t0, method: 'redirect+recursive' };
+ }
+ }
+ // Sub gagal / manual -> lanjut ke flow provider di bawah dengan halaman dest.
  }
  }
  if (first.error && !first.html) {
@@ -1305,6 +1316,10 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  if (provider.fn === 'safelinku') {
  const r = await flowSafelinku(pageUrl, html, deadline, jar);
  if (r && r.destination) return { ok: true, provider: provider.name, destination: r.destination, chain: [...chain, r.destination], ms: Date.now() - t0, method: 'safelinku' };
+ }
+ if (provider.fn !== 'safelinku' && /<form[^>]*action\s*=\s*"[^"]*redirect\.php/i.test(html) && /name=["']ray_id["']/i.test(html)) {
+ const r = await flowSafelinku(pageUrl, html, deadline, jar);
+ if (r && r.destination) return { ok: true, provider: 'SafelinkU (klon)', destination: r.destination, chain: [...chain, r.destination], ms: Date.now() - t0, method: 'safelinku-clone' };
  }
  if (provider.fn === 'shrinkme') {
  const r = await flowShrinkme(pageUrl, html, deadline, jar);
