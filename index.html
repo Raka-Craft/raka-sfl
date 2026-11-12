@@ -922,7 +922,13 @@ async function runBypass(list) {
             stats(true, 0);
             continue;
           }
-          // Mesin gagal -> jatuh ke kartu manual di bawah.
+          // Mesin gagal -> jatuh ke kartu manual di bawah, sertakan jejak mesin.
+          if (eg && (eg.trail || eg.page)) {
+            const tr = document.createElement('div');
+            tr.className = 'card';
+            tr.innerHTML = '<div style="font-size:11px;color:#a1a1aa;word-break:break-all">Jejak mesin: ' + esc((eg.trail || '') + (eg.page ? ' | Halaman: ' + eg.page : '')) + '</div>';
+            $('homeRes').appendChild(tr);
+          }
         }
         setLastTry(u, false, d.reason || d.error || 'Gagal');
         const e = document.createElement('div');

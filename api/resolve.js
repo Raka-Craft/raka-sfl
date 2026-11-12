@@ -1476,6 +1476,11 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  }
  }
 
+ if (isCloudflare(html)) {
+ return { ok: false, needManual: true, provider: provider.name, manualUrl: pageUrl,
+ reason: 'Situs ini dilindungi Cloudflare dari server. Di APK, mesin WebView akan mencoba otomatis dari HP-mu.',
+ chain, ms: Date.now() - t0 };
+ }
  return { ok: false, provider: provider.name, error: 'Tidak bisa menemukan link asli. Situs ini mungkin butuh JavaScript/browser.', chain, ms: Date.now() - t0, debug: { htmlLen: (html || '').length, htmlHead: (html || '').slice(0, 200), cf: isCloudflare(html), sflDbg, pageUrl } };
 }
 
