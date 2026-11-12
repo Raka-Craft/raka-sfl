@@ -5,7 +5,7 @@ const PROVIDERS = [
  { hosts: ['adf.ly', 'adfoc.us', 'j.gs', 'q.gs', 'bc.vc'], name: 'AdFly', fn: 'adfly' },
  { hosts: ['ouo.io', 'ouo.press'], name: 'Ouo.io', fn: 'ouo' },
  { hosts: ['exe.io', 'exeo.app'], name: 'Exe.io', fn: 'ouoLike' },
- { hosts: ['linkvertise.com', 'linkvertise.net'], name: 'Linkvertise', fn: 'linkvertise' },
+ { hosts: ['linkvertise.com', 'linkvertise.net'], name: 'Linkvertise', fn: 'manual', reason: 'Linkvertise tidak didukung di BypassPro (dihapus atas permintaan Raka — terlalu susah, butuh key yang cuma berlaku 24 jam).' },
  { hosts: ['sfl.gl', 'safelinku.com'], name: 'SafelinkU', fn: 'safelinku' },
  { hosts: ['sub4unlock.com', 'sub4unlock.co', 'sub4unlock.io', 'sub2unlock.com', 'unlocksubs.com'], name: 'SubUnlock', fn: 'subunlock' },
  { hosts: ['clk.sh','oko.sh','oii.la','clksz.com'], name: 'Clk.sh', fn: 'manual', reason: 'Clk.sh wajib verifikasi CAPTCHA (Cloudflare Turnstile) yang cuma bisa diselesaikan manusia.' },
@@ -130,6 +130,9 @@ function jsRedirects(html) {
  /location\.replace\(\s*["']([^"']+)["']\s*\)/gi,
  /top\.location\s*=\s*["']([^"']+)["']/gi,
  /window\.open\(\s*["']([^"']+)["']/gi,
+ /document\.location(?:\.href)?\s*=\s*["']([^"']+)["']/gi,
+ /(?:window\.)?location\.assign\(\s*["']([^"']+)["']/gi,
+ /(?:window\.)?location(?:\.href)?\s*=\s*`([^`]+)`/gi,
  ];
  for (const p of pats) {
  let m;
@@ -139,6 +142,25 @@ function jsRedirects(html) {
  }
  }
  return out;
+}
+
+// Banyak shortener modern menaruh link tujuan di JSON tertanam
+// ("url": "https://...", "target": "...", dst) — ambil langsung.
+function jsonEmbeddedUrls(html, selfHost) {
+ const out = [];
+ const re = /"(?:url|target|redirect|destination|link|href|download_url|downloadUrl)"\s*:\s*"((?:https?:)?\/\/[^"\\\s]+)"/gi;
+ let m;
+ while ((m = re.exec(html)) !== null) {
+ let u = m[1].replace(/\\\//g, '/');
+ if (u.startsWith('//')) u = 'https:' + u;
+ const v = validHttpUrl(u);
+ if (!v) continue;
+ const h = hostOf(v);
+ if (!h || h === selfHost || isSuspiciousAdHost(h)) continue;
+ if (/\.(png|jpe?g|gif|webp|svg|ico|css|js|woff2?|ttf)(\?|$)/i.test(v)) continue;
+ if (!out.includes(v)) out.push(v);
+ }
+ return out.sort((a, b) => (isFinalDestination(b) ? 1 : 0) - (isFinalDestination(a) ? 1 : 0));
 }
 
 function base64Candidates(html) {
@@ -159,7 +181,7 @@ function base64Candidates(html) {
 
 const AD_DOMAINS = ['google', 'facebook', 'doubleclick', 'googlesyndication', 'analytics', 'adsystem', 'adservice', 'taboola', 'outbrain', 'mgid', 'revcontent', 'popads', 'popcash', 'adcash', 'propeller', 'exoclick', 'adnxs', 'criteo', 'hotjar', 'cloudflare', 'hcaptcha', 'recaptcha', 'gstatic', 'schema.org', 'w3.org', 'youtube.com', 'youtu.be'];
 
-const FILE_HOSTS=['mediafire.com','apkadmin.com','drive.google.com','github.com'];
+const FILE_HOSTS=['mediafire.com','apkadmin'+'.com','drive.google.com','github.com','mega'+'.nz','pixeldrain'+'.com','gofile'+'.io','krakenfiles'+'.com','buzzheavier'+'.com','uptobox'+'.com','1fichier'+'.com','send'+'.cm','usersdrive'+'.com','dropbox'+'.com'];
 const MEDIAFIRE_FIRST = true;
 
 function isSuspiciousAdHost(host) {
@@ -808,6 +830,51 @@ function isFinalDestination(url) {
  return false;
 }
 
+// Coba submit form POST dengan hidden input (pola Ouo/ShrinkMe generik).
+async function tryHunterForms(html, pageUrl, jar, deadline) {
+ const reF = /<form\b([^>]*)>([\s\S]{0,3000}?)<\/form>/gi;
+ let m;
+ while ((m = reF.exec(html)) !== null) {
+ if (Date.now() > deadline - 5000) return null;
+ const attrs = m[1], body = m[2];
+ if (/search|login|signup|register|newsletter|comment/i.test(attrs + body.slice(0, 200))) continue;
+ const method = ((attrs.match(/method\s*=\s*["']([^"']+)["']/i) || [])[1] || 'get').toLowerCase();
+ if (method !== 'post') continue;
+ const inputs = {};
+ const ire = /<input[^>]*name\s*=\s*["']([^"']+)["'][^>]*>/gi;
+ let im;
+ while ((im = ire.exec(body)) !== null) {
+ const vm = im[0].match(/value\s*=\s*["']([^"']*)["']/i);
+ inputs[im[1]] = vm ? vm[1] : '';
+ }
+ if (Object.keys(inputs).length === 0) continue;
+ const am = attrs.match(/action\s*=\s*["']([^"']+)["']/i);
+ let actionUrl;
+ try { actionUrl = new URL(am ? am[1] : pageUrl, pageUrl).href; } catch (e) { continue; }
+ try {
+ const r = await fetchT(actionUrl, { method: 'POST', redirect: 'manual', headers: { ...baseHeaders(jar), 'Content-Type': 'application/x-www-form-urlencoded', 'Referer': pageUrl }, body: new URLSearchParams(inputs).toString() }, 8000);
+ storeCookies(jar, r.headers);
+ const loc = r.headers.get('location');
+ const ct = (r.headers.get('content-type') || '').toLowerCase();
+ if (loc) {
+ const dest = new URL(loc, actionUrl).href;
+ if (isFinalDestination(dest)) return { url: dest, html: '', final: true };
+ const f2 = await fetchChain(dest, deadline, jar);
+ try { await r.arrayBuffer().catch(() => {}); } catch (e) {}
+ if (f2.html) return { url: f2.url, html: f2.html };
+ return null;
+ }
+ if (ct.includes('html')) {
+ const h2 = await r.text().catch(() => '');
+ try { await r.arrayBuffer().catch(() => {}); } catch (e) {}
+ if (h2) return { url: actionUrl, html: h2 };
+ }
+ try { await r.arrayBuffer().catch(() => {}); } catch (e) {}
+ } catch (e) { continue; }
+ }
+ return null;
+}
+
 async function buttonHunterFlow(pageUrl, html, deadline, jar) {
  const visited = new Set();
  let cur = { url: pageUrl, html };
@@ -828,7 +895,13 @@ async function buttonHunterFlow(pageUrl, html, deadline, jar) {
  if (visited.has(b.url.split('#')[0])) continue;
  nxt = b; break;
  }
- if (!nxt) break;
+ if (!nxt) {
+ // Tidak ada tombol: coba submit form POST yang ada di halaman.
+ const posted = await tryHunterForms(cur.html || '', cur.url, jar, deadline);
+ if (posted && posted.final) return { destination: posted.url, steps: step + 1 };
+ if (posted && posted.html) { cur = { url: posted.url, html: posted.html }; continue; }
+ break;
+ }
  // Ikuti tombol terbaik
  try {
  const r = await fetchT(nxt.url, { redirect: 'manual', headers: { ...baseHeaders(jar), 'Referer': cur.url } }, 9000);
@@ -897,71 +970,6 @@ async function flowOuo(pageUrl, html, deadline, jar) {
  }
  try { await r.arrayBuffer(); } catch (e) {}
  return null;
-}
-
-async function bypassViaRip(linkUrl, deadline) {
-const crypto=require('crypto');
-try{
-const ep='https://api.linkvertise.lol/backend/bypass?url='+encodeURIComponent(linkUrl);
-const r1=await fetchT(ep,{headers:{'User-Agent':'Mozilla/5.0'}},10000);
-const html=await r1.text().catch(()=> '');
-try{await r1.arrayBuffer().catch(()=>{});}catch(e){}
-const sm=html.match(/(\{"prefix":"[0-9a-f]+".*?\})/);
-if(!sm)return null;
-const spec=JSON.parse(sm[1]);
-const bits=Math.round(parseFloat(spec.diff)*4),w=Math.ceil(bits/4),sp=w*4-bits;
-let nonce=-1;
-for(let n=0;n<8000000;n++){
-if(Date.now()>deadline-5000)return null;
-const h=crypto.createHash('sha256').update(spec.prefix+':'+n).digest('hex');
-let v=parseInt(h.slice(0,w),16);if(sp)v>>>=sp;
-if(v===0){nonce=n;break;}
-}
-if(nonce<0)return null;
-const csrfM=html.match(/name="rg_csrf"[^>]*value="([^"]*)"/);
-const fd=new URLSearchParams({rg_pow_prefix:spec.prefix,rg_pow_exp:spec.exp,rg_pow_diff:spec.diff,rg_pow_sig:spec.sig,rg_pow_nonce:String(nonce),rg_csrf:csrfM?csrfM[1]:''});
-const r2=await fetchT(ep,{method:'POST',body:fd.toString(),headers:{'User-Agent':'Mozilla/5.0'}},25000);
-const txt=await r2.text().catch(()=> '');
-try{await r2.arrayBuffer().catch(()=>{});}catch(e){}
-for(const line of txt.split('\n')){
-if(line.startsWith('data: ')){
-try{const ev=JSON.parse(line.slice(6));
-if(ev.result&&ev.success){const v=validHttpUrl(ev.result);
-if(v&&!/linkvertise\.com$/i.test(hostOf(v)))return{destination:v};}}catch(e){}
-}}
-return null;
-}catch(e){return null;}
-}
-
-async function flowLinkvertise(pageUrl, deadline) {
- try {
- const u = new URL(pageUrl);
- const rParam = u.searchParams.get('r');
- if (rParam) {
- try {
- const decoded = Buffer.from(decodeURIComponent(rParam), 'base64').toString();
- const v = validHttpUrl(decoded);
- if (v) return { destination: v, via: 'dynamic-b64' };
- } catch (e) {}
- }
- const parts = u.pathname.split('/').filter(Boolean).slice(0, 2);
- if (parts.length < 1) return null;
- const path = '/' + parts.join('/');
- const h = { 'User-Agent': UA, 'Accept': 'application/json' };
- const r1 = await fetchT('https://publisher.linkvertise.com/api/v1/redirect/link/static' + path, { headers: h }, 6000);
- const j1 = await r1.json().catch(() => null);
- try { await r1.arrayBuffer().catch(() => {}); } catch (e) {}
- const linkId = j1 && j1.data && j1.data.link && j1.data.link.id;
- if (!linkId) return null;
- const serial = Buffer.from(JSON.stringify({ timestamp: Date.now(), random: String(Math.floor(Math.random()*9999999)), link_id: linkId })).toString('base64');
- const r2 = await fetchT('https://publisher.linkvertise.com/api/v1/redirect/link' + path + '/target?serial=' + encodeURIComponent(serial), { method: 'POST', headers: h }, 6000);
- const j2 = await r2.json().catch(() => null);
- try { await r2.arrayBuffer().catch(() => {}); } catch (e) {}
- const target = j2 && j2.data && (j2.data.target || (j2.data.link && j2.data.link.url));
- const v = target && validHttpUrl(target);
- if (v && /linkvertise\.com$/i.test(hostOf(v))) return null;
- return v ? { destination: v } : null;
- } catch (e) { return null; }
 }
 
 const crypto = require('crypto');
@@ -1367,24 +1375,6 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  chain, ms: Date.now() - t0 };
  }
 
- if (provider.fn === 'linkvertise') {
- const r = await flowLinkvertise(pageUrl, deadline);
- if (r) return { ok: true, provider: provider.name, destination: r.destination, chain: [...chain, r.destination], ms: Date.now() - t0, method: r.via || 'api' };
- const rip = await bypassViaRip(pageUrl, deadline);
- if (rip && rip.destination) {
- return { ok: true, provider: provider.name + ' (Rip)', destination: rip.destination,
- chain: [...chain, rip.destination], ms: Date.now() - t0, method: 'rip-api' };
- }
- const lhunt = await buttonHunterFlow(pageUrl, html, deadline, jar);
- if (lhunt && lhunt.destination) {
- return { ok: true, provider: provider.name + ' (Button Hunter)', destination: lhunt.destination,
- chain: [...chain, lhunt.destination], ms: Date.now() - t0, method: 'button-hunter', steps: lhunt.steps };
- }
- return { ok: false, needManual: true, provider: provider.name, manualUrl: pageUrl,
- reason: 'Linkvertise butuh verifikasi browser. Buka linknya di Chrome, selesaikan hitung mundurnya, baru dapat link asli.',
- chain, ms: Date.now() - t0 };
- }
-
  if (provider.fn === 'generic' || provider.name === 'Otomatis') {
  const learned = await autoLearnBypass(pageUrl, html, deadline, jar);
  if (learned && learned.destination) {
@@ -1430,6 +1420,12 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  const b64 = base64Candidates(html).filter(u => hostOf(u) !== selfHost);
  if (b64.length > 0) {
  return { ok: true, provider: provider.name, destination: b64[0], chain: [...chain, b64[0]], ms: Date.now() - t0, method: 'base64', candidates: b64.slice(1, 6) };
+ }
+
+ // 5b) URL dari JSON tertanam
+ const jem = jsonEmbeddedUrls(html, selfHost);
+ if (jem.length > 0) {
+ return { ok: true, provider: provider.name, destination: jem[0], chain: [...chain, jem[0]], ms: Date.now() - t0, method: 'json-embedded', candidates: jem.slice(1, 6) };
  }
 
  // 6) kandidat generik — hanya yang lolos final destination
@@ -1478,6 +1474,19 @@ module.exports = async (req, res) => {
  7, deadline
  );
  if (out && out.ok && out.destination) {
+ // Rantai: destinasi masih shortener terkenal (mis. SFL -> Ouo -> file) -> resolve lagi, maks 2 lompatan.
+ for (let depth = 0; depth < 2; depth++) {
+ const dh = hostOf(out.destination);
+ const sp = detectProvider(dh);
+ if (!sp || sp.fn === 'manual' || sp.name === 'Otomatis') break;
+ if (Date.now() > deadline - 8000) break;
+ const sub = await resolveUrl(out.destination, deadline, false);
+ if (!sub || !sub.ok || !sub.destination) break;
+ out.destination = sub.destination;
+ out.provider = out.provider + ' → ' + sub.provider;
+ out.chain = [...(out.chain || []), ...sub.chain.slice(1)];
+ out.method = (out.method || '') + '+chain';
+ }
  try {
  const fin = await finalHop(out.destination, deadline);
  if (fin && fin.finalUrl) {
