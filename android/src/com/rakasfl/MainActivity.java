@@ -40,6 +40,7 @@ public class MainActivity extends Activity {
     private String engineHost;
     private boolean engineBusy;
     private boolean engineDone;
+    private volatile boolean danceDone;
     private Handler engineHandler = new Handler();
     private Runnable engineTimeout;
     private String engineTrail = "";
@@ -217,7 +218,9 @@ public class MainActivity extends Activity {
         "send" + DOT + "cm",
         "vikingfile" + DOT + "com",
         "vik1ngfile" + DOT + "site",
-        "apkadmin" + DOT + "com"
+        "apkadmin" + DOT + "com",
+        "romsfun" + DOT + "com",
+        "coolrom" + DOT + "com"
     };
     private static final String ENGINE_JS =
         "(function(){"
@@ -242,6 +245,7 @@ public class MainActivity extends Activity {
         + "if(!sflTried&&sl0){sflTried=true;setTimeout(sflApi,1500);}"
         + "if(!indaTried&&document.getElementById('go-link')){indaTried=true;var tm=document.getElementById('timer');var secs=parseInt((tm&&tm.textContent)||'5',10);if(isNaN(secs)||secs<0)secs=5;if(secs>30)secs=30;prog('inda:tunggu '+(secs+1)+' dtk');setTimeout(indaApi,(secs+1)*1000);}"
         + "if(!readyTried&&(location.pathname.indexOf('/ready/go')>=0||document.title.indexOf('almost ready')>=0)){readyTries++;var gh=document.documentElement.innerHTML;var qc=String.fromCharCode(34);var i1=gh.indexOf('window.location.href');if(i1>=0){var q1=gh.indexOf(qc,i1);var q2=gh.indexOf(qc,q1+1);if(q1>0&&q2>q1){var rd=gh.slice(q1+1,q2).split(String.fromCharCode(92)+'/').join('/');if(rd.indexOf('http://')===0||rd.indexOf('https://')===0){readyTried=true;prog('ready:-> '+rd.slice(0,60));location.href=rd;return;}}}if(readyTries>=3){readyTried=true;prog('ready:tidak-ketemu');}}"
+        + "if(window.__bpDanceDone&&tries>=6){var hh=location.hostname;var isSfl=hh.indexOf('besargaji.com')>=0||hh.indexOf('bahasteknologi.com')>=0||hh.indexOf('sfl.gl')>=0||hh.indexOf('safelinku.com')>=0||hh.indexOf('khaddavi.net')>=0||hh.indexOf('indapk.com')>=0;if(!isSfl&&!document.querySelector('.slbtn')&&!document.querySelector('form[action*=redirect]')&&!document.getElementById('go-link')&&location.pathname.indexOf('/ready/go')<0){try{window.EngineAPI.done(location.href);}catch(e){}return;}}"
         + "if(!tapped){var tf=document.querySelector('iframe[src*=challenges.cloudflare]')||document.querySelector('.cf-turnstile iframe')||document.querySelector('iframe[src*=turnstile]');"
         + "if(tf){var rr=tf.getBoundingClientRect();if(rr.width>10&&rr.height>10){try{window.EngineAPI.tapAt(rr.left+22,rr.top+rr.height/2);tapped=true;window.EngineAPI.clicked('tap-turnstile');}catch(e){} return;}}}"
         + "var sl=document.querySelector('button.slbtn, .slbtn');"
@@ -322,6 +326,7 @@ public class MainActivity extends Activity {
         engineCb = cb;
         engineHost = hostOf(url);
         engineDone = false;
+        danceDone = false;
         engineBusy = true;
         engineTrail = "";
         trail("mulai:" + hostOf(url));
@@ -383,7 +388,7 @@ public class MainActivity extends Activity {
                 public void onPageFinished(WebView v, String u) {
                     if (engineDone) return;
                     trail("page:" + hostOf(u));
-                    try { v.evaluateJavascript(ENGINE_JS, null); } catch (Exception e) {}
+                    try { v.evaluateJavascript("window.__bpDanceDone=" + danceDone + ";" + ENGINE_JS, null); } catch (Exception e) {}
                     engineCaptureInfo();
                 }
             });
@@ -448,7 +453,19 @@ public class MainActivity extends Activity {
         // Masuk jejak juga, supaya loop reload tahu halaman masih hidup.
         @JavascriptInterface
         public void progress(final String text) {
+            if (text != null && (text.contains("api:go ok") || text.contains("inda:go ok") || text.startsWith("ready:->"))) danceDone = true;
             trail("dom:" + text);
+        }
+        // Dipanggil skrip injeksi saat halaman tujuan akhir tercapai (bukan shortener, bukan file host).
+        @JavascriptInterface
+        public void done(final String url) {
+            runOnUiThread(new Runnable() {
+                @Override public void run() {
+                    if (engineDone || url == null || !url.startsWith("http")) return;
+                    trail("done:" + hostOf(url));
+                    engineFinish("{\"status\":\"success\",\"result\":\"" + escJson(url) + "\"}");
+                }
+            });
         }
         // Suntik ketukan ke WebView mesin di koordinat CSS (dari JS).
         @JavascriptInterface
