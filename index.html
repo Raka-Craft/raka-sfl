@@ -337,7 +337,7 @@
   <div class="brand">
     <span class="logo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>
     <span>BYPASSPRO</span>
-    <span class="ver" id="verLabel">v21.0</span>
+    <span class="ver" id="verLabel">v22.0</span>
   </div>
   <div class="srv"><span class="sdot" id="srvDot"></span><span id="srvTxt">Menghubungkan...</span></div>
 </header>
@@ -905,11 +905,10 @@ async function runBypass(list) {
         }
         buzz(); autoCopyTxt(show);
       } else {
-        hadError = true;
         if (d.needManual && window.EngineAPI && typeof window.EngineAPI.resolve === 'function') {
           const busy = document.createElement('div');
           busy.className = 'card';
-          busy.innerHTML = '<div style="font-size:13px;color:#e4e4e7">Mesin lagi nyoba CAPTCHA-nya... (ketuk + coba ulang otomatis, bisa sampai 1 menit)</div>';
+          busy.innerHTML = '<div style="font-size:13px;color:#e4e4e7">Mesin lagi nyoba... (otomatis, bisa sampai 2 menit)</div>';
           $('homeRes').appendChild(busy);
           const eg = await engineViaNative(u);
           busy.remove();
@@ -930,6 +929,8 @@ async function runBypass(list) {
             $('homeRes').appendChild(tr);
           }
         }
+        // Sampai sini berarti mesin gagal / tidak ada mesin: barulah ini gagal.
+        hadError = true;
         setLastTry(u, false, d.reason || d.error || 'Gagal');
         const e = document.createElement('div');
         e.className = 'card err-card';
