@@ -231,7 +231,7 @@ public class MainActivity extends Activity {
         + "async function indaApi(){try{var f=document.getElementById('go-link');if(!f){prog('inda:no-form');return;}var fd=new FormData(f);var body=new URLSearchParams(fd).toString();var r=await fetch(f.action||'/links/go',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json','X-Requested-With':'XMLHttpRequest'},body:body});var j=await r.json().catch(function(){return null;});if(j&&j.status==='success'&&j.url){prog('inda:go ok');location.href=j.url;return;}prog('inda:err '+(j&&j.message?String(j.message).slice(0,20):'no-json'));}catch(e){prog('inda:exc');}}"
         + "function prog(s){try{window.EngineAPI.progress(s);}catch(e){}}"
         + "function sflTok(){var m=document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/);if(!m)return null;var x='';try{x=decodeURIComponent(m[1]);}catch(e){x=m[1];}var u='#MmM2NWQzYmYxMThmZjc5NDY5NGZmYzNkZDM2OTE0MTkyZGM1ZTFiNjBiMmZjZTVjNDE3MGM1ZGFhMmIzMmJmNg==';return x.slice(0,128-u.length)+u;}"
-        + "function sflPost(p,b){return fetch(p,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify(b)}).then(function(r){return r.json();}).catch(function(){return null;});}"
+        + "function sflPost(p,b){function f(){return fetch(p,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify(b)});}return f().then(function(r){if(r.status===419)return f();return r;}).then(function(r){return r.json();}).catch(function(){return null;});}"
         + "async function sflApi(){try{var tok=sflTok();if(!tok){prog('api:no-token');return;}var sj=await sflPost('/api/session',{_token:tok});var step=sj&&sj.step;prog('api:session step='+(step==null?'?':step));if(step===2){var key=Math.floor(Math.random()*1000);var size=((window.innerWidth+key)*2)+'.'+((window.innerHeight+key)*2);var ado=null;try{ado=localStorage.getItem('ado');}catch(e){}var gj=await sflPost('/api/go',{key:key,size:size,ado:ado});var goUrl=gj&&gj.url;if(!goUrl){prog('api:no-gourl');return;}prog('api:go ok');try{var gh=await fetch(goUrl,{credentials:'same-origin'}).then(function(r){return r.text();}).catch(function(){return '';});var i1=gh.indexOf('window.location.href');if(i1>=0){var qc=String.fromCharCode(34);var q1=gh.indexOf(qc,i1);var q2=gh.indexOf(qc,q1+1);if(q1>0&&q2>q1){location.href=gh.slice(q1+1,q2).split(String.fromCharCode(92)+'/').join('/');return;}}}catch(e){}location.href=goUrl;return;}var vj=await sflPost('/api/verify',{_a:0});var target=vj&&vj.target;if(!target){prog('api:no-target');return;}prog('api:verify -> '+(target.indexOf('redirect.php')>=0?'artikel':'tujuan'));location.href=target;}catch(e){prog('api:err');}}"
         + "setInterval(function(){"
         + "tries++;"
@@ -242,10 +242,10 @@ public class MainActivity extends Activity {
         + "else if(document.body&&/Security Verification|Type the text from the image/i.test(document.body.innerText||'')){cap='gambar';}"
         + "var domKey=(sl0?(sl0.innerText||'').trim():'-')+'|'+cap;"
         + "if(domKey!==lastDom){lastDom=domKey;var rs0=sl0?sl0.getBoundingClientRect():null;prog('slbtn='+(sl0?(sl0.innerText||'').trim().slice(0,20):'-')+' rect='+(rs0?Math.round(rs0.width)+'x'+Math.round(rs0.height):'-')+' cap='+(cap||'-'));}"
-        + "if(!sflTried&&sl0){sflTried=true;setTimeout(sflApi,1500);}"
+        + "if(!sflTried&&sl0){sflTried=true;setTimeout(sflApi,500);}"
         + "if(!indaTried&&document.getElementById('go-link')){indaTried=true;var tm=document.getElementById('timer');var secs=parseInt((tm&&tm.textContent)||'5',10);if(isNaN(secs)||secs<0)secs=5;if(secs>30)secs=30;prog('inda:tunggu '+(secs+1)+' dtk');setTimeout(indaApi,(secs+1)*1000);}"
         + "if(!readyTried&&(location.pathname.indexOf('/ready/go')>=0||document.title.indexOf('almost ready')>=0)){readyTries++;var gh=document.documentElement.innerHTML;var qc=String.fromCharCode(34);var i1=gh.indexOf('window.location.href');if(i1>=0){var q1=gh.indexOf(qc,i1);var q2=gh.indexOf(qc,q1+1);if(q1>0&&q2>q1){var rd=gh.slice(q1+1,q2).split(String.fromCharCode(92)+'/').join('/');if(rd.indexOf('http://')===0||rd.indexOf('https://')===0){readyTried=true;prog('ready:-> '+rd.slice(0,60));location.href=rd;return;}}}if(readyTries>=3){readyTried=true;prog('ready:tidak-ketemu');}}"
-        + "if(window.__bpDanceDone&&tries>=6){var hh=location.hostname;var isSfl=hh.indexOf('besargaji.com')>=0||hh.indexOf('bahasteknologi.com')>=0||hh.indexOf('sfl.gl')>=0||hh.indexOf('safelinku.com')>=0||hh.indexOf('khaddavi.net')>=0||hh.indexOf('indapk.com')>=0;if(!isSfl&&!document.querySelector('.slbtn')&&!document.querySelector('form[action*=redirect]')&&!document.getElementById('go-link')&&location.pathname.indexOf('/ready/go')<0){try{window.EngineAPI.done(location.href);}catch(e){}return;}}"
+        + "if(window.__bpDanceDone&&tries>=8){var hh=location.hostname;var isSfl=hh.indexOf('besargaji.com')>=0||hh.indexOf('bahasteknologi.com')>=0||hh.indexOf('sfl.gl')>=0||hh.indexOf('safelinku.com')>=0||hh.indexOf('khaddavi.net')>=0||hh.indexOf('indapk.com')>=0;if(!isSfl&&!document.querySelector('.slbtn')&&!document.querySelector('form[action*=redirect]')&&!document.getElementById('go-link')&&location.pathname.indexOf('/ready/go')<0){try{window.EngineAPI.done(location.href);}catch(e){}return;}}"
         + "if(!tapped){var tf=document.querySelector('iframe[src*=challenges.cloudflare]')||document.querySelector('.cf-turnstile iframe')||document.querySelector('iframe[src*=turnstile]');"
         + "if(tf){var rr=tf.getBoundingClientRect();if(rr.width>10&&rr.height>10){try{window.EngineAPI.tapAt(rr.left+22,rr.top+rr.height/2);tapped=true;window.EngineAPI.clicked('tap-turnstile');}catch(e){} return;}}}"
         + "var sl=document.querySelector('button.slbtn, .slbtn');"
@@ -275,7 +275,7 @@ public class MainActivity extends Activity {
         + "if(r.width>=40&&r.height>=20&&a>bestArea){best=all[k];bestArea=a;}}"
         + "if(best){try{var bt=(best.textContent||'').trim().slice(0,40);best.click();window.EngineAPI.clicked('fallback:'+bt);}catch(e){}}"
         + "}"
-        + "},600);"
+        + "},300);"
         + "})();";
 
     private static String hostOf(String url) {
@@ -335,6 +335,7 @@ public class MainActivity extends Activity {
             WebSettings es = engineWv.getSettings();
             es.setJavaScriptEnabled(true);
             es.setDomStorageEnabled(true);
+            es.setBlockNetworkImage(true);
             es.setSupportMultipleWindows(false);
             es.setJavaScriptCanOpenWindowsAutomatically(false);
             es.setUserAgentString("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36");

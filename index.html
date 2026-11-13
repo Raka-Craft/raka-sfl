@@ -890,8 +890,20 @@ async function runBypass(list) {
       stats(true, 0); buzz(); autoCopyTxt(cached.finalUrl || cached.destination);
       continue;
     }
+    // Klon SFL yang servernya SELALU diblokir Cloudflare (terbukti dari Vercel):
+    // server tidak akan pernah bisa -- langsung ke mesin, hemat ~3 detik.
+    // sfl.gl & khaddavi TIDAK masuk daftar (server bisa menyelesaikan keduanya).
+    let d;
     try {
-      const d = await bypassOne(u);
+      const hasEngine = window.EngineAPI && typeof window.EngineAPI.resolve === 'function';
+      let skipServer = false;
+      try {
+        const hh = new URL(u).hostname.replace(/^www\./, '');
+        skipServer = hasEngine && ['besargaji.com', 'bahasteknologi.com'].some(s => hh === s || hh.endsWith('.' + s));
+      } catch (e) {}
+      d = skipServer
+        ? { ok: false, needManual: true, reason: 'Situs ini dilindungi Cloudflare dari server. Mesin WebView mencoba otomatis dari HP-mu.', manualUrl: u }
+        : await bypassOne(u);
       if (d.ok) {
         stats(true, d.ms);
         setLastTry(u, true);
