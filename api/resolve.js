@@ -1485,7 +1485,7 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  let lh = await rl.text().catch(() => '');
  try { await rl.arrayBuffer().catch(() => {}); } catch (e) {}
  lpDbg += ' | lp-status:' + rl.status + ' len:' + (lh || '').length;
- if (!lh || lh.includes('Just a moment...') || lh.includes('challenges.cloudflare.com')) {
+ if (rl.status !== 200 || !lh || lh.includes('Just a moment...') || lh.includes('challenges.cloudflare.com')) {
  try {
  const gu2 = new URL(lpUrl);
  const gtHost2 = gu2.hostname.replace(/\./g, '-') + '.translate.goog';
