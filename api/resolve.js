@@ -1503,6 +1503,8 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  const filem = lh.match(/var file\s*=\s*["'](https?:\/\/[^"']+)["']/i);
  if (filem) { const fv = validHttpUrl(filem[1]); if (fv) cands = [fv]; }
  if (cands.length === 0) cands = genericCandidates(lh, hostOf(pageUrl));
+ // URL translate.goog adalah artefak proxy Google Translate, BUKAN link asli.
+ cands = cands.filter(u => { const hh = hostOf(u); return hh !== 'translate.goog' && !hh.endsWith('.translate.goog') && hh !== 'translate.google.com'; });
  lpDbg += ' | cands:' + cands.length + (cands[0] ? ' first:' + cands[0].slice(0, 60) : '');
  if (cands.length > 0) {
  const dest = cands[0];
@@ -1693,7 +1695,11 @@ module.exports = async (req, res) => {
  // Validasi akhir: URL yang ditampilkan JANGAN pernah berupa halaman
  // shortener/locker itu sendiri (mis. sub2unlock.id/set) -- itu bukan link asli.
  const shown = out.finalUrl || out.destination || '';
- const shp = detectProvider(hostOf(shown));
+ const shHost = hostOf(shown);
+ const shp = detectProvider(shHost);
+ if (shHost === 'translate.goog' || shHost.endsWith('.translate.goog') || shHost === 'translate.google.com') {
+ return res.status(200).json({ ok: false, provider: out.provider, error: 'Bypass berhenti di halaman proxy terjemahan -- link aslinya belum ketemu.', chain: out.chain });
+ }
  if (shp && shp.name !== 'Otomatis') {
  return res.status(200).json({ ok: false, provider: out.provider, error: 'Bypass berhenti di halaman perantara (' + hostOf(shown) + ') -- link aslinya belum ketemu.', chain: out.chain });
  }
