@@ -218,6 +218,7 @@ public class MainActivity extends Activity {
         "send" + DOT + "cm",
         "vikingfile" + DOT + "com",
         "vik1ngfile" + DOT + "site",
+        "devuploads" + DOT + "com",
         "apkadmin" + DOT + "com",
         "romsfun" + DOT + "com",
         "coolrom" + DOT + "com"

@@ -11,6 +11,7 @@ const PROVIDERS = [
  { hosts: ['clk.sh','oko.sh','oii.la','clksz.com'], name: 'Clk.sh', fn: 'manual', reason: 'Clk.sh wajib verifikasi CAPTCHA (Cloudflare Turnstile) yang cuma bisa diselesaikan manusia.' },
  { hosts: ['bit.ly','bitly.is','j.mp','amzn.to'], name: 'Bitly', fn: 'generic' },
  { hosts: ['shrinkme.click','shrinkme.io'], name: 'ShrinkMe', fn: 'shrinkme' },
+ { hosts: ['link.bsebsolver.in'], name: 'PremiumLink', fn: 'premiumlink' },
  { hosts: ['tpi.li','tii.la','oei.la','iir.la','tvi.la','lnbz.la','srnky.com'], name: 'Tpi.li', fn: 'manual', reason: 'Tpi.li wajib verifikasi CAPTCHA (Cloudflare Turnstile) yang cuma bisa diselesaikan manusia.' },
  { hosts: ['move2link.co','move2link.com'], name: 'Move2Link', fn: 'manual', reason: 'Move2Link dilindungi Cloudflare, selesaikan verifikasinya manual di browser.' },
  { hosts: ['shorte.st', 'sh.st'], name: 'Shorte.st', fn: 'generic' },
@@ -181,7 +182,7 @@ function base64Candidates(html) {
 
 const AD_DOMAINS = ['google', 'facebook', 'doubleclick', 'googlesyndication', 'analytics', 'adsystem', 'adservice', 'taboola', 'outbrain', 'mgid', 'revcontent', 'popads', 'popcash', 'adcash', 'propeller', 'exoclick', 'adnxs', 'criteo', 'hotjar', 'cloudflare', 'hcaptcha', 'recaptcha', 'gstatic', 'schema.org', 'w3.org', 'youtube.com', 'youtu.be'];
 
-const FILE_HOSTS=['mediafire.com','apkadmin'+'.com','drive.google.com','github.com','mega'+'.nz','pixeldrain'+'.com','gofile'+'.io','krakenfiles'+'.com','buzzheavier'+'.com','uptobox'+'.com','1fichier'+'.com','send'+'.cm','usersdrive'+'.com','dropbox'+'.com','vikingfile'+'.com','vik1ngfile'+'.site'];
+const FILE_HOSTS=['mediafire.com','apkadmin'+'.com','drive.google.com','github.com','mega'+'.nz','pixeldrain'+'.com','gofile'+'.io','krakenfiles'+'.com','buzzheavier'+'.com','uptobox'+'.com','1fichier'+'.com','send'+'.cm','usersdrive'+'.com','dropbox'+'.com','vikingfile'+'.com','vik1ngfile'+'.site','devuploads'+'.com'];
 const MEDIAFIRE_FIRST = true;
 
 function isSuspiciousAdHost(host) {
@@ -1184,6 +1185,48 @@ async function flowSafelinku(pageUrl, html, deadline, jar) {
  } catch (e) { dbg.push("exc:"+e.message); return { _dbg: dbg }; }
 }
 
+/* PremiumLink (link.bsebsolver.in): /alias -> /step1 (timer 10 dtk) ->
+   /step2 (timer 10 dtk) -> /final (302 ke tujuan). Timer ditegakkan server:
+   step2 yang dibuka terlalu cepat ditendang balik ke step1. Total ~22 dtk. */
+async function flowPremiumlink(pageUrl, html, deadline, jar) {
+ try {
+ const origin = new URL(pageUrl).origin;
+ let step1Url = pageUrl;
+ if (!/\/step1/.test(pageUrl)) {
+ const r0 = await fetchT(origin + '/step1', { redirect: 'manual', headers: { ...baseHeaders(jar), 'Referer': pageUrl } }, 8000);
+ storeCookies(jar, r0.headers);
+ try { await r0.arrayBuffer().catch(() => {}); } catch (e) {}
+ step1Url = origin + '/step1';
+ }
+ if (Date.now() > deadline - 25000) return null;
+ await new Promise(r => setTimeout(r, 11000));
+ if (Date.now() > deadline - 13000) return null;
+ const r2 = await fetchT(origin + '/step2', { redirect: 'manual', headers: { ...baseHeaders(jar), 'Referer': step1Url } }, 8000);
+ storeCookies(jar, r2.headers);
+ const loc2 = r2.headers.get('location');
+ const h2 = await r2.text().catch(() => '');
+ try { await r2.arrayBuffer().catch(() => {}); } catch (e) {}
+ if (loc2) return null;
+ if (!h2.includes('/final')) return null;
+ if (Date.now() > deadline - 12000) return null;
+ await new Promise(r => setTimeout(r, 11000));
+ const rf = await fetchT(origin + '/final', { redirect: 'manual', headers: { ...baseHeaders(jar), 'Referer': origin + '/step2' } }, 8000);
+ storeCookies(jar, rf.headers);
+ const locf = rf.headers.get('location');
+ const hf = await rf.text().catch(() => '');
+ try { await rf.arrayBuffer().catch(() => {}); } catch (e) {}
+ if (locf) {
+ const dest = validHttpUrl(new URL(locf, origin + '/final').href);
+ if (dest) return { destination: dest };
+ }
+ const jr = jsRedirects(hf).filter(u => hostOf(u) !== hostOf(pageUrl));
+ if (jr.length > 0) return { destination: jr[0] };
+ const gc = genericCandidates(hf, hostOf(pageUrl));
+ if (gc.length > 0) return { destination: gc[0] };
+ return null;
+ } catch (e) { return null; }
+}
+
 /* Final hop: kejar redirect sampai mentok; MediaFire -> ambil link download langsung */
 async function finalHop(dest, deadline) {
  const jar = {};
@@ -1331,6 +1374,13 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  reason: 'ShrinkMe diblokir Cloudflare dari server. Selesaikan manual di browser kamu.',
  chain, ms: Date.now() - t0 };
  }
+ if (provider.fn === 'premiumlink') {
+ const r = await flowPremiumlink(pageUrl, html, deadline, jar);
+ if (r && r.destination) return { ok: true, provider: provider.name, destination: r.destination, chain: [...chain, r.destination], ms: Date.now() - t0, method: 'premiumlink-steps' };
+ return { ok: false, needManual: true, provider: provider.name, manualUrl: pageUrl,
+ reason: 'Link ini pakai timer 2 langkah (PremiumLink). Mesin akan menunggu timernya dari HP-mu.',
+ chain, ms: Date.now() - t0 };
+ }
  if (provider.fn === 'subunlock') {
  try {
  const dp = html.match(/data-page="([^"]{100,20000})"/);
@@ -1357,6 +1407,86 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  }
  }
  } catch (e) {}
+ // final.php (unlocksubs.com / Sub2Unlock): form tersembunyi secureForm +
+ // access_token -> POST -> halaman berisi redirect.php?code&token -> 302 ke hop berikut.
+ // Tugas "Subscribe"-nya cuma timer 6,5 detik setelah klik -- TIDAK ada verifikasi
+ // subscribe sungguhan (Tuan yang menemukan ini), jadi POST langsung ini sah.
+ const sfm = html.match(/<form[^>]*id=["']secureForm["'][^>]*action=["']([^"']*final\.php[^"']*)["'][^>]*>/i);
+ const atoken = (html.match(/name=["']access_token["']\s+value=["']([^"']+)["']/i) || [])[1];
+ if (sfm && atoken) {
+ try {
+ const postUrl = new URL(sfm[1], pageUrl).href;
+ const rp = await fetchT(postUrl, { method: 'POST', redirect: 'manual', headers: { ...baseHeaders(jar), 'Content-Type': 'application/x-www-form-urlencoded', 'Referer': pageUrl }, body: 'access_token=' + encodeURIComponent(atoken) }, 8000);
+ storeCookies(jar, rp.headers);
+ const ploc = rp.headers.get('location');
+ const fh = await rp.text().catch(() => '');
+ try { await rp.arrayBuffer().catch(() => {}); } catch (e) {}
+ let dest = null;
+ if (ploc) { try { dest = new URL(ploc, postUrl).href; } catch (e) {} }
+ if (!dest) {
+ const rm = fh.match(/redirect\.php\?code=([^&"']+)&token=([A-Za-z0-9]+)/);
+ if (rm) {
+ const redirUrl = new URL('redirect.php?code=' + rm[1] + '&token=' + rm[2], pageUrl).href;
+ const r2 = await fetchT(redirUrl, { redirect: 'manual', headers: { ...baseHeaders(jar), 'Referer': postUrl } }, 8000);
+ storeCookies(jar, r2.headers);
+ const loc2 = r2.headers.get('location');
+ const rh2 = await r2.text().catch(() => '');
+ try { await r2.arrayBuffer().catch(() => {}); } catch (e) {}
+ if (loc2) { try { dest = new URL(loc2, redirUrl).href; } catch (e) {} }
+ if (!dest) {
+ const jr2 = jsRedirects(rh2).filter(u => hostOf(u) !== hostOf(pageUrl));
+ if (jr2.length > 0) dest = jr2[0];
+ else { const gc2 = genericCandidates(rh2, hostOf(pageUrl)); if (gc2.length > 0) dest = gc2[0]; }
+ }
+ }
+ }
+ if (dest) {
+ dest = validHttpUrl(dest);
+ if (dest && hostOf(dest) !== hostOf(pageUrl)) {
+ const dh = hostOf(dest);
+ const isShort = PROVIDERS.some(pp => pp.hosts.some(hh => dh === hh || dh.endsWith('.' + hh)));
+ if (isShort && Date.now() < deadline - 8000) {
+ const sub = await resolveUrl(dest, deadline, false);
+ if (sub && sub.ok && sub.destination) {
+ return { ok: true, provider: provider.name + ' → ' + sub.provider,
+ destination: sub.destination, chain: [...chain, dest, ...sub.chain.slice(1)],
+ ms: Date.now() - t0, method: 'subunlock-final+recursive' };
+ }
+ }
+ return { ok: true, provider: provider.name, destination: dest,
+ chain: [...chain, dest], ms: Date.now() - t0, method: 'subunlock-final' };
+ }
+ }
+ } catch (e) {}
+ }
+ // sub4unlock.com: halaman S berisi link LP/LP.php -- tujuan tertanam di sana.
+ const lpm = html.match(/LP\/LP\.php\?id=[^"'&\s]+(?:&[^"'&\s]*)?/i);
+ if (lpm) {
+ try {
+ const lpUrl = new URL(lpm[0].replace(/&amp;/g, '&'), pageUrl).href;
+ const rl = await fetchT(lpUrl, { redirect: 'manual', headers: { ...baseHeaders(jar), 'Referer': pageUrl } }, 8000);
+ storeCookies(jar, rl.headers);
+ const lh = await rl.text().catch(() => '');
+ try { await rl.arrayBuffer().catch(() => {}); } catch (e) {}
+ const cands = genericCandidates(lh, hostOf(pageUrl));
+ if (cands.length > 0) {
+ const dest = cands[0];
+ const dh = hostOf(dest);
+ const isShort = PROVIDERS.some(pp => pp.hosts.some(hh => dh === hh || dh.endsWith('.' + hh)));
+ if (isShort && Date.now() < deadline - 8000) {
+ const sub = await resolveUrl(dest, deadline, false);
+ if (sub && sub.ok && sub.destination) {
+ return { ok: true, provider: provider.name + ' → ' + sub.provider,
+ destination: sub.destination, chain: [...chain, lpUrl, dest, ...sub.chain.slice(1)],
+ ms: Date.now() - t0, method: 'subunlock-lp+recursive' };
+ }
+ }
+ return { ok: true, provider: provider.name, destination: dest,
+ chain: [...chain, lpUrl, dest], ms: Date.now() - t0, method: 'subunlock-lp' };
+ }
+ } catch (e) {}
+ }
+
  const fm = html.match(/<form[^>]*action=["']([^"']*redirect\.php[^"']*)["'][^>]*>/i);
  if (fm) {
  const code = (html.match(/name=["']code["']\s+value=["']([^"']+)["']/i) || [])[1];
@@ -1389,7 +1519,7 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  }
  }
  return { ok: false, needManual: true, provider: provider.name, manualUrl: pageUrl,
- reason: 'Link ini tipe "Subscribe to Unlock" - kamu harus subscribe channel YouTube-nya dulu di browser, baru link download-nya kebuka.',
+ reason: 'Link ini tipe "Subscribe to Unlock" -- pencet tombol tugasnya satu-satu, tunggu beberapa detik sampai tercentang, lalu pencet "Get Link". (Tidak perlu benar-benar subscribe.)',
  chain, ms: Date.now() - t0 };
  }
 
@@ -1502,7 +1632,10 @@ module.exports = async (req, res) => {
  const dh = hostOf(out.destination);
  const sp = detectProvider(dh);
  if (!sp || sp.fn === 'manual' || sp.name === 'Otomatis') break;
- if (Date.now() > deadline - 8000) break;
+ if (Date.now() > deadline - 8000) {
+ // Rantai masih berlanjut tapi waktu server hampir habis: serahkan ke mesin HP.
+ return res.status(200).json({ ok: false, needManual: true, provider: out.provider, manualUrl: out.destination, reason: 'Rantai linknya panjang dan waktu server hampir habis -- mesin akan melanjutkan dari HP-mu.', chain: out.chain });
+ }
  const sub = await resolveUrl(out.destination, deadline, false);
  if (sub && sub.needManual) {
  // Rantai mentok di halaman yang butuh aksi manusia (mis. Subscribe to Unlock):
