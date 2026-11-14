@@ -1550,7 +1550,7 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  }
  return { ok: false, needManual: true, provider: provider.name, manualUrl: pageUrl,
  reason: 'Link ini tipe "Subscribe to Unlock" -- pencet tombol tugasnya satu-satu, tunggu beberapa detik sampai tercentang, lalu pencet "Get Link". (Tidak perlu benar-benar subscribe.)',
- chain, ms: Date.now() - t0, debug: { htmlLen: (html || '').length, htmlHead: (html || '').slice(0, 300), pageUrl } };
+ chain, ms: Date.now() - t0, debug: { htmlLen: (html || '').length, htmlHead: (html || '').slice(0, 300), pageUrl, hasLP: (html || '').includes('LP/LP.php'), hasSecureForm: (html || '').includes('secureForm'), lpSnippet: (function () { const i = (html || '').indexOf('LP/'); return i < 0 ? 'none' : (html || '').slice(Math.max(0, i - 80), i + 120); })() } };
  }
 
  if (provider.fn === 'generic' || provider.name === 'Otomatis') {
