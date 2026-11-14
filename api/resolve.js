@@ -7,7 +7,7 @@ const PROVIDERS = [
  { hosts: ['exe.io', 'exeo.app'], name: 'Exe.io', fn: 'ouoLike' },
  { hosts: ['linkvertise.com', 'linkvertise.net'], name: 'Linkvertise', fn: 'manual', reason: 'Linkvertise tidak didukung di BypassPro (dihapus atas permintaan Raka — terlalu susah, butuh key yang cuma berlaku 24 jam).' },
  { hosts: ['sfl.gl', 'safelinku.com', 'besargaji.com', 'bahasteknologi.com'], name: 'SafelinkU', fn: 'safelinku' },
- { hosts: ['sub4unlock.com', 'sub4unlock.co', 'sub4unlock.io', 'sub2unlock.com', 'unlocksubs.com'], name: 'SubUnlock', fn: 'subunlock' },
+ { hosts: ['sub4unlock.com', 'sub4unlock.co', 'sub4unlock.io', 'sub4unlock.id', 'sub4unlock.me', 'sub2unlock.com', 'sub2unlock.id', 'sub2unlock.io', 'sub2unlock.me', 'unlocksubs.com'], name: 'SubUnlock', fn: 'subunlock' },
  { hosts: ['clk.sh','oko.sh','oii.la','clksz.com'], name: 'Clk.sh', fn: 'manual', reason: 'Clk.sh wajib verifikasi CAPTCHA (Cloudflare Turnstile) yang cuma bisa diselesaikan manusia.' },
  { hosts: ['bit.ly','bitly.is','j.mp','amzn.to'], name: 'Bitly', fn: 'generic' },
  { hosts: ['shrinkme.click','shrinkme.io'], name: 'ShrinkMe', fn: 'shrinkme' },
@@ -1504,6 +1504,11 @@ module.exports = async (req, res) => {
  if (!sp || sp.fn === 'manual' || sp.name === 'Otomatis') break;
  if (Date.now() > deadline - 8000) break;
  const sub = await resolveUrl(out.destination, deadline, false);
+ if (sub && sub.needManual) {
+ // Rantai mentok di halaman yang butuh aksi manusia (mis. Subscribe to Unlock):
+ // teruskan needManual-nya, jangan mengembalikan halaman perantara sebagai sukses.
+ return res.status(200).json({ ok: false, needManual: true, provider: sub.provider, manualUrl: sub.manualUrl || out.destination, reason: sub.reason, chain: [...(out.chain || []), ...(sub.chain || []).slice(1)] });
+ }
  if (!sub || !sub.ok || !sub.destination) break;
  out.destination = sub.destination;
  out.provider = out.provider + ' → ' + sub.provider;
@@ -1517,6 +1522,13 @@ module.exports = async (req, res) => {
  out.finalVia = fin.via;
  }
  } catch (e) {}
+ // Validasi akhir: URL yang ditampilkan JANGAN pernah berupa halaman
+ // shortener/locker itu sendiri (mis. sub2unlock.id/set) -- itu bukan link asli.
+ const shown = out.finalUrl || out.destination || '';
+ const shp = detectProvider(hostOf(shown));
+ if (shp && shp.name !== 'Otomatis') {
+ return res.status(200).json({ ok: false, provider: out.provider, error: 'Bypass berhenti di halaman perantara (' + hostOf(shown) + ') -- link aslinya belum ketemu.', chain: out.chain });
+ }
  }
  return res.status(200).json(out);
  } catch (e) {

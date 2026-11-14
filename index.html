@@ -836,6 +836,15 @@ function stepsDone(ok) {
     if (!ok) el.style.color = '#fca5a5';
   });
 }
+/* Host locker/shortener: URL di host ini BUKAN link asli -- jangan pernah
+   ditampilkan sebagai LINK ASLI (pernah kejadian: sub2unlock.id/set). */
+const LOCKER_HOSTS = ['sub2unlock.', 'sub4unlock.', 'sfl.gl', 'safelinku.com', 'besargaji.com', 'bahasteknologi.com', 'ouo.io', 'ouo.press', 'exe.io', 'adf.ly', 'adfoc.us', 'shrinkme.', 'clk.sh', 'tpi.li', 'linkvertise.', 'bit.ly', 'tinyurl.com', 'cutt.ly', 'is.gd'];
+function isLockerUrl(u) {
+  try {
+    const h = new URL(u).hostname.toLowerCase().replace(/^www\./, '');
+    return LOCKER_HOSTS.some(s => s.endsWith('.') ? h.indexOf(s) === 0 : (h === s || h.endsWith('.' + s)));
+  } catch (e) { return false; }
+}
 /* ===== CACHE ===== */
 function getCache(src) {
   if (!cfg.cache) return null;
@@ -884,11 +893,17 @@ async function runBypass(list) {
   for (const u of list) {
     const cached = getCache(u);
     if (cached) {
-      setLastTry(u, true);
-      $('homeRes').appendChild(resCard(u, cached, true));
-      saveHist(u, cached.finalUrl || cached.destination);
-      stats(true, 0); buzz(); autoCopyTxt(cached.finalUrl || cached.destination);
-      continue;
+      const cshow = cached.finalUrl || cached.destination;
+      if (cshow && !isLockerUrl(cshow)) {
+        setLastTry(u, true);
+        $('homeRes').appendChild(resCard(u, cached, true));
+        saveHist(u, cshow);
+        stats(true, 0); buzz(); autoCopyTxt(cshow);
+        continue;
+      }
+      // Cache berisi hasil perantara dari bug lama (mis. sub2unlock.id/set):
+      // buang, lalu bypass ulang.
+      try { const cc = JSON.parse(localStorage.getItem('rb_cache') || '{}'); delete cc[u]; localStorage.setItem('rb_cache', JSON.stringify(cc)); } catch (e) {}
     }
     // Klon SFL yang servernya SELALU diblokir Cloudflare (terbukti dari Vercel):
     // server tidak akan pernah bisa -- langsung ke mesin, hemat ~3 detik.
@@ -904,6 +919,13 @@ async function runBypass(list) {
       d = skipServer
         ? { ok: false, needManual: true, reason: 'Situs ini dilindungi Cloudflare dari server. Mesin WebView mencoba otomatis dari HP-mu.', manualUrl: u }
         : await bypassOne(u);
+      if (d.ok) {
+        const show0 = d.finalUrl || d.destination;
+        if (show0 && isLockerUrl(show0)) {
+          // Server mengembalikan halaman perantara sebagai "sukses" -- anggap gagal saja.
+          d = { ok: false, error: 'Bypass berhenti di halaman perantara (' + hostOf(show0) + ') -- link aslinya belum ketemu.' };
+        }
+      }
       if (d.ok) {
         stats(true, d.ms);
         setLastTry(u, true);
@@ -937,7 +959,7 @@ async function runBypass(list) {
           $('homeRes').appendChild(busy);
           const eg = await engineViaNative(u);
           busy.remove();
-          if (eg && eg.status === 'success' && eg.result) {
+          if (eg && eg.status === 'success' && eg.result && !isLockerUrl(eg.result)) {
             setLastTry(u, true);
             const dd = { ok: true, finalUrl: eg.result };
             setCache(u, dd); saveHist(u, eg.result);

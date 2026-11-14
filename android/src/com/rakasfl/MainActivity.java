@@ -245,7 +245,7 @@ public class MainActivity extends Activity {
         + "if(!sflTried&&sl0){sflTried=true;setTimeout(sflApi,500);}"
         + "if(!indaTried&&document.getElementById('go-link')){indaTried=true;var tm=document.getElementById('timer');var secs=parseInt((tm&&tm.textContent)||'5',10);if(isNaN(secs)||secs<0)secs=5;if(secs>30)secs=30;prog('inda:tunggu '+(secs+1)+' dtk');setTimeout(indaApi,(secs+1)*1000);}"
         + "if(!readyTried&&(location.pathname.indexOf('/ready/go')>=0||document.title.indexOf('almost ready')>=0)){readyTries++;var gh=document.documentElement.innerHTML;var qc=String.fromCharCode(34);var i1=gh.indexOf('window.location.href');if(i1>=0){var q1=gh.indexOf(qc,i1);var q2=gh.indexOf(qc,q1+1);if(q1>0&&q2>q1){var rd=gh.slice(q1+1,q2).split(String.fromCharCode(92)+'/').join('/');if(rd.indexOf('http://')===0||rd.indexOf('https://')===0){readyTried=true;prog('ready:-> '+rd.slice(0,60));location.href=rd;return;}}}if(readyTries>=3){readyTried=true;prog('ready:tidak-ketemu');}}"
-        + "if(window.__bpDanceDone&&tries>=8){var hh=location.hostname;var isSfl=hh.indexOf('besargaji.com')>=0||hh.indexOf('bahasteknologi.com')>=0||hh.indexOf('sfl.gl')>=0||hh.indexOf('safelinku.com')>=0||hh.indexOf('khaddavi.net')>=0||hh.indexOf('indapk.com')>=0;if(!isSfl&&!document.querySelector('.slbtn')&&!document.querySelector('form[action*=redirect]')&&!document.getElementById('go-link')&&location.pathname.indexOf('/ready/go')<0){try{window.EngineAPI.done(location.href);}catch(e){}return;}}"
+        + "if(window.__bpDanceDone&&tries>=8){var hh=location.hostname;var isSfl=hh.indexOf('besargaji.com')>=0||hh.indexOf('bahasteknologi.com')>=0||hh.indexOf('sfl.gl')>=0||hh.indexOf('safelinku.com')>=0||hh.indexOf('khaddavi.net')>=0||hh.indexOf('indapk.com')>=0;var isLocker=hh.indexOf('sub2unlock.')>=0||hh.indexOf('sub4unlock.')>=0||hh.indexOf('ouo.io')>=0||hh.indexOf('ouo.press')>=0||hh.indexOf('exe.io')>=0||hh.indexOf('adf.ly')>=0||hh.indexOf('shrinkme.')>=0||hh.indexOf('clk.sh')>=0||hh.indexOf('linkvertise.')>=0;if(isLocker){try{window.EngineAPI.stuck('locker:'+hh);}catch(e){}return;}if(!isSfl&&!document.querySelector('.slbtn')&&!document.querySelector('form[action*=redirect]')&&!document.getElementById('go-link')&&location.pathname.indexOf('/ready/go')<0){try{window.EngineAPI.done(location.href);}catch(e){}return;}}"
         + "if(!tapped){var tf=document.querySelector('iframe[src*=challenges.cloudflare]')||document.querySelector('.cf-turnstile iframe')||document.querySelector('iframe[src*=turnstile]');"
         + "if(tf){var rr=tf.getBoundingClientRect();if(rr.width>10&&rr.height>10){try{window.EngineAPI.tapAt(rr.left+22,rr.top+rr.height/2);tapped=true;window.EngineAPI.clicked('tap-turnstile');}catch(e){} return;}}}"
         + "var sl=document.querySelector('button.slbtn, .slbtn');"
@@ -463,6 +463,8 @@ public class MainActivity extends Activity {
             runOnUiThread(new Runnable() {
                 @Override public void run() {
                     if (engineDone || url == null || !url.startsWith("http")) return;
+                    String dh = hostOf(url);
+                    if (dh.contains("sub2unlock.") || dh.contains("sub4unlock.") || dh.contains("ouo.io") || dh.contains("exe.io") || dh.contains("adf.ly") || dh.contains("shrinkme.") || dh.contains("clk.sh") || dh.contains("linkvertise.")) { stuck("locker:" + dh); return; }
                     trail("done:" + hostOf(url));
                     engineFinish("{\"status\":\"success\",\"result\":\"" + escJson(url) + "\"}");
                 }
@@ -502,6 +504,7 @@ public class MainActivity extends Activity {
         public void stuck(final String reason) {
             runOnUiThread(new Runnable() {
                 @Override public void run() {
+                    trail("stuck:" + reason);
                     engineFinish("{\"status\":\"error\",\"code\":\"ERR_CF_STUCK\",\"message\":\"Cloudflare minta verifikasi manual.\"}");
                 }
             });
