@@ -957,7 +957,10 @@ async function runBypass(list) {
           busy.className = 'card';
           busy.innerHTML = '<div style="font-size:13px;color:#e4e4e7">Mesin lagi nyoba... (otomatis, bisa sampai 2 menit)</div>';
           $('homeRes').appendChild(busy);
-          const eg = await engineViaNative(u);
+          // Mesin mulai dari lompatan terjauh yang sudah dicapai server
+          // (manualUrl), bukan mengulang dari link awal -- mis. server sudah
+          // membuka SubUnlock sampai ke link SFL, mesin langsung lanjut dari SFL.
+          const eg = await engineViaNative(d.manualUrl || u);
           busy.remove();
           if (eg && eg.status === 'success' && eg.result && !isLockerUrl(eg.result)) {
             setLastTry(u, true);

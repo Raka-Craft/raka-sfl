@@ -1407,13 +1407,30 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  // v20: destinasi masih shortener -> rekursif
  const dh = hostOf(dest0);
  const isShort = PROVIDERS.some(p => p.hosts.some(h => dh === h || dh.endsWith('.' + h)));
- if (isShort && Date.now() < deadline - 8000) {
+ if (isShort) {
+ if (Date.now() < deadline - 8000) {
  const sub = await resolveUrl(dest0, deadline, false);
  if (sub && sub.ok && sub.destination) {
  return { ok: true, provider: provider.name + ' → ' + sub.provider,
  destination: sub.destination, chain: [...chain, dest0, ...sub.chain.slice(1)],
  ms: Date.now() - t0, method: 'subunlock-data+recursive' };
  }
+ // Lanjutan butuh mesin (mis. SFL yang diblokir CF dari server): teruskan
+ // ke mesin, jangan kembalikan link perantara sebagai "sukses".
+ if (sub && sub.needManual) {
+ return { ok: false, needManual: true, provider: provider.name + ' → ' + sub.provider,
+ manualUrl: sub.manualUrl || dest0, reason: sub.reason,
+ chain: [...chain, dest0, ...(sub.chain || []).slice(1)], ms: Date.now() - t0 };
+ }
+ // Lanjutan gagal total (mati/tidak bisa dibuka): laporkan jujur.
+ return { ok: false, provider: provider.name,
+ error: 'Link SubUnlock-nya kebuka, tapi link lanjutannya (' + hostOf(dest0) + ') tidak bisa dibuka.',
+ chain: [...chain, dest0], ms: Date.now() - t0 };
+ }
+ // Waktu server hampir habis sebelum sempat lanjut: serahkan ke mesin.
+ return { ok: false, needManual: true, provider: provider.name, manualUrl: dest0,
+ reason: 'Rantai linknya panjang dan waktu server hampir habis -- mesin akan melanjutkan dari HP-mu.',
+ chain: [...chain, dest0], ms: Date.now() - t0 };
  }
  return { ok: true, provider: provider.name, destination: dest0,
  chain: [...chain, dest0], ms: Date.now() - t0, method: 'subunlock-data' };
@@ -1459,13 +1476,26 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  if (dest && hostOf(dest) !== hostOf(pageUrl)) {
  const dh = hostOf(dest);
  const isShort = PROVIDERS.some(pp => pp.hosts.some(hh => dh === hh || dh.endsWith('.' + hh)));
- if (isShort && Date.now() < deadline - 8000) {
+ if (isShort) {
+ if (Date.now() < deadline - 8000) {
  const sub = await resolveUrl(dest, deadline, false);
  if (sub && sub.ok && sub.destination) {
  return { ok: true, provider: provider.name + ' → ' + sub.provider,
  destination: sub.destination, chain: [...chain, dest, ...sub.chain.slice(1)],
  ms: Date.now() - t0, method: 'subunlock-final+recursive' };
  }
+ if (sub && sub.needManual) {
+ return { ok: false, needManual: true, provider: provider.name + ' → ' + sub.provider,
+ manualUrl: sub.manualUrl || dest, reason: sub.reason,
+ chain: [...chain, dest, ...(sub.chain || []).slice(1)], ms: Date.now() - t0 };
+ }
+ return { ok: false, provider: provider.name,
+ error: 'Link SubUnlock-nya kebuka, tapi link lanjutannya (' + hostOf(dest) + ') tidak bisa dibuka.',
+ chain: [...chain, dest], ms: Date.now() - t0 };
+ }
+ return { ok: false, needManual: true, provider: provider.name, manualUrl: dest,
+ reason: 'Rantai linknya panjang dan waktu server hampir habis -- mesin akan melanjutkan dari HP-mu.',
+ chain: [...chain, dest], ms: Date.now() - t0 };
  }
  return { ok: true, provider: provider.name, destination: dest,
  chain: [...chain, dest], ms: Date.now() - t0, method: 'subunlock-final' };
@@ -1515,13 +1545,26 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  const dest = cands[0];
  const dh = hostOf(dest);
  const isShort = PROVIDERS.some(pp => pp.hosts.some(hh => dh === hh || dh.endsWith('.' + hh)));
- if (isShort && Date.now() < deadline - 8000) {
+ if (isShort) {
+ if (Date.now() < deadline - 8000) {
  const sub = await resolveUrl(dest, deadline, false);
  if (sub && sub.ok && sub.destination) {
  return { ok: true, provider: provider.name + ' → ' + sub.provider,
  destination: sub.destination, chain: [...chain, lpUrl, dest, ...sub.chain.slice(1)],
  ms: Date.now() - t0, method: 'subunlock-lp+recursive' };
  }
+ if (sub && sub.needManual) {
+ return { ok: false, needManual: true, provider: provider.name + ' → ' + sub.provider,
+ manualUrl: sub.manualUrl || dest, reason: sub.reason,
+ chain: [...chain, lpUrl, dest, ...(sub.chain || []).slice(1)], ms: Date.now() - t0 };
+ }
+ return { ok: false, provider: provider.name,
+ error: 'Link SubUnlock-nya kebuka, tapi link lanjutannya (' + hostOf(dest) + ') tidak bisa dibuka.',
+ chain: [...chain, lpUrl, dest], ms: Date.now() - t0 };
+ }
+ return { ok: false, needManual: true, provider: provider.name, manualUrl: dest,
+ reason: 'Rantai linknya panjang dan waktu server hampir habis -- mesin akan melanjutkan dari HP-mu.',
+ chain: [...chain, lpUrl, dest], ms: Date.now() - t0 };
  }
  return { ok: true, provider: provider.name, destination: dest,
  chain: [...chain, lpUrl, dest], ms: Date.now() - t0, method: 'subunlock-lp' };
