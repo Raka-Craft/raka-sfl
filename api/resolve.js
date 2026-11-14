@@ -1486,17 +1486,22 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  try { await rl.arrayBuffer().catch(() => {}); } catch (e) {}
  lpDbg += ' | lp-status:' + rl.status + ' len:' + (lh || '').length;
  if (rl.status !== 200 || !lh || lh.includes('Just a moment...') || lh.includes('challenges.cloudflare.com')) {
+ // GT kadang mengembalikan 404 dari cache edge tertentu -- coba bahasa target
+ // lain (cache key berbeda) sekali lagi sebelum menyerah.
+ for (const tl of ['id', 'es']) {
  try {
  const gu2 = new URL(lpUrl);
  const gtHost2 = gu2.hostname.replace(/\./g, '-') + '.translate.goog';
  const sep2 = gu2.search ? '&' : '?';
- const gtUrl2 = 'https://' + gtHost2 + gu2.pathname + gu2.search + sep2 + '_x_tr_sl=en&_x_tr_tl=id';
+ const gtUrl2 = 'https://' + gtHost2 + gu2.pathname + gu2.search + sep2 + '_x_tr_sl=en&_x_tr_tl=' + tl;
  const rg2 = await fetchT(gtUrl2, { redirect: 'manual', headers: baseHeaders(jar) }, 8000);
  const ct2 = (rg2.headers.get('content-type') || '').toLowerCase();
- if (ct2.includes('html')) { try { lh = await rg2.text(); } catch (e) {} }
- lpDbg += ' | gt-status:' + rg2.status + ' len:' + (lh || '').length;
+ if (rg2.status === 200 && ct2.includes('html')) { try { lh = await rg2.text(); } catch (e) {} }
  try { await rg2.arrayBuffer().catch(() => {}); } catch (e) {}
+ lpDbg += ' | gt(' + tl + '):' + rg2.status + ' len:' + (lh || '').length;
+ if (rg2.status === 200 && lh && lh.includes('var file')) break;
  } catch (e) {}
+ }
  }
  // LP.php menaruh tujuan di 'var file = "https://..."' -- ambil itu dulu.
  let cands = [];
