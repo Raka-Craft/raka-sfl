@@ -1382,6 +1382,20 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  chain, ms: Date.now() - t0 };
  }
  if (provider.fn === 'subunlock') {
+ // sub4unlock.com diblokir Cloudflare dari IP server: ambil lewat Google
+ // Translate (IP Google dipercaya CF) -- pola yang sama seperti flowSafelinku.
+ if (!html || html.includes('Just a moment...') || html.includes('challenges.cloudflare.com')) {
+ try {
+ const gu = new URL(pageUrl);
+ const gtHost = gu.hostname.replace(/\./g, '-') + '.translate.goog';
+ const sep = gu.search ? '&' : '?';
+ const gtUrl = 'https://' + gtHost + gu.pathname + gu.search + sep + '_x_tr_sl=en&_x_tr_tl=id';
+ const rg = await fetchT(gtUrl, { redirect: 'manual', headers: baseHeaders(jar) }, 8000);
+ const ct = (rg.headers.get('content-type') || '').toLowerCase();
+ if (ct.includes('html')) { try { html = await rg.text(); } catch (e) {} }
+ try { await rg.arrayBuffer().catch(() => {}); } catch (e) {}
+ } catch (e) {}
+ }
  try {
  const dp = html.match(/data-page="([^"]{100,20000})"/);
  if (dp) {
@@ -1466,9 +1480,25 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  const lpUrl = new URL(lpm[0].replace(/&amp;/g, '&'), pageUrl).href;
  const rl = await fetchT(lpUrl, { redirect: 'manual', headers: { ...baseHeaders(jar), 'Referer': pageUrl } }, 8000);
  storeCookies(jar, rl.headers);
- const lh = await rl.text().catch(() => '');
+ let lh = await rl.text().catch(() => '');
  try { await rl.arrayBuffer().catch(() => {}); } catch (e) {}
- const cands = genericCandidates(lh, hostOf(pageUrl));
+ if (!lh || lh.includes('Just a moment...') || lh.includes('challenges.cloudflare.com')) {
+ try {
+ const gu2 = new URL(lpUrl);
+ const gtHost2 = gu2.hostname.replace(/\./g, '-') + '.translate.goog';
+ const sep2 = gu2.search ? '&' : '?';
+ const gtUrl2 = 'https://' + gtHost2 + gu2.pathname + gu2.search + sep2 + '_x_tr_sl=en&_x_tr_tl=id';
+ const rg2 = await fetchT(gtUrl2, { redirect: 'manual', headers: baseHeaders(jar) }, 8000);
+ const ct2 = (rg2.headers.get('content-type') || '').toLowerCase();
+ if (ct2.includes('html')) { try { lh = await rg2.text(); } catch (e) {} }
+ try { await rg2.arrayBuffer().catch(() => {}); } catch (e) {}
+ } catch (e) {}
+ }
+ // LP.php menaruh tujuan di 'var file = "https://..."' -- ambil itu dulu.
+ let cands = [];
+ const filem = lh.match(/var file\s*=\s*["'](https?:\/\/[^"']+)["']/i);
+ if (filem) { const fv = validHttpUrl(filem[1]); if (fv) cands = [fv]; }
+ if (cands.length === 0) cands = genericCandidates(lh, hostOf(pageUrl));
  if (cands.length > 0) {
  const dest = cands[0];
  const dh = hostOf(dest);
