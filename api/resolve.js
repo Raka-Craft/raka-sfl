@@ -1475,13 +1475,16 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  }
  // sub4unlock.com: halaman S berisi link LP/LP.php -- tujuan tertanam di sana.
  const lpm = html.match(/LP\/LP\.php\?id=[^"'&\s]+(?:&[^"'&\s]*)?/i);
+ if (typeof lpDbg === 'undefined') var lpDbg = 'no-match';
  if (lpm) {
+ lpDbg = 'matched:' + lpm[0].slice(0, 60);
  try {
  const lpUrl = new URL(lpm[0].replace(/&amp;/g, '&'), pageUrl).href;
  const rl = await fetchT(lpUrl, { redirect: 'manual', headers: { ...baseHeaders(jar), 'Referer': pageUrl } }, 8000);
  storeCookies(jar, rl.headers);
  let lh = await rl.text().catch(() => '');
  try { await rl.arrayBuffer().catch(() => {}); } catch (e) {}
+ lpDbg += ' | lp-status:' + rl.status + ' len:' + (lh || '').length;
  if (!lh || lh.includes('Just a moment...') || lh.includes('challenges.cloudflare.com')) {
  try {
  const gu2 = new URL(lpUrl);
@@ -1491,6 +1494,7 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  const rg2 = await fetchT(gtUrl2, { redirect: 'manual', headers: baseHeaders(jar) }, 8000);
  const ct2 = (rg2.headers.get('content-type') || '').toLowerCase();
  if (ct2.includes('html')) { try { lh = await rg2.text(); } catch (e) {} }
+ lpDbg += ' | gt-status:' + rg2.status + ' len:' + (lh || '').length;
  try { await rg2.arrayBuffer().catch(() => {}); } catch (e) {}
  } catch (e) {}
  }
@@ -1499,6 +1503,7 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  const filem = lh.match(/var file\s*=\s*["'](https?:\/\/[^"']+)["']/i);
  if (filem) { const fv = validHttpUrl(filem[1]); if (fv) cands = [fv]; }
  if (cands.length === 0) cands = genericCandidates(lh, hostOf(pageUrl));
+ lpDbg += ' | cands:' + cands.length + (cands[0] ? ' first:' + cands[0].slice(0, 60) : '');
  if (cands.length > 0) {
  const dest = cands[0];
  const dh = hostOf(dest);
@@ -1550,7 +1555,7 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  }
  return { ok: false, needManual: true, provider: provider.name, manualUrl: pageUrl,
  reason: 'Link ini tipe "Subscribe to Unlock" -- pencet tombol tugasnya satu-satu, tunggu beberapa detik sampai tercentang, lalu pencet "Get Link". (Tidak perlu benar-benar subscribe.)',
- chain, ms: Date.now() - t0, debug: { htmlLen: (html || '').length, htmlHead: (html || '').slice(0, 300), pageUrl, hasLP: (html || '').includes('LP/LP.php'), hasSecureForm: (html || '').includes('secureForm'), lpSnippet: (function () { const i = (html || '').indexOf('LP/'); return i < 0 ? 'none' : (html || '').slice(Math.max(0, i - 80), i + 120); })() } };
+ chain, ms: Date.now() - t0, debug: { htmlLen: (html || '').length, htmlHead: (html || '').slice(0, 300), pageUrl, hasLP: (html || '').includes('LP/LP.php'), hasSecureForm: (html || '').includes('secureForm'), lpDbg: (typeof lpDbg !== 'undefined' ? lpDbg : 'n/a'), lpSnippet: (function () { const i = (html || '').indexOf('LP/'); return i < 0 ? 'none' : (html || '').slice(Math.max(0, i - 80), i + 120); })() } };
  }
 
  if (provider.fn === 'generic' || provider.name === 'Otomatis') {
