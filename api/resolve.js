@@ -1393,17 +1393,85 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  chain, ms: Date.now() - t0 };
  }
  if (provider.fn === 'subunlock') {
- // Link mati: slug yang tidak dikenal platform di-redirect ke /set lalu ke
- // beranda (terbukti: sub2unlock.id/AC90ne -> /set -> /). Halaman link yang
- // hidup SELALU mempertahankan path slug-nya -- jadi kalau halaman akhirnya
- // beranda atau /set, linknya sudah dihapus/kedaluwarsa. Laporkan jujur,
- // jangan needManual -- mesin HP juga tidak bisa membangkitkan link mati.
+ // v34 KOREKSI: /set BUKAN tanda link mati -- itu halaman perantara HIDUP
+ // ("Your link is safe" + tombol Continue -> /dec). Vonis mati v31 salah
+ // total: h8AoTt & AC90ne (dibuat HARI INI, active:true) ikut divonis mati.
+ // Data lengkap link ada DI HALAMAN /set sendiri: <textarea name="link">
+ // berisi JSON {original: <URLSearchParams>, direct, active} -- nilai
+ // lnk1..lnk5 & tugasnya base64 (atob + decodeURIComponent). Server ambil
+ // lnk1 langsung, tanpa klik apa pun. Sinyal mati YANG BENAR: active=false,
+ // exp kedaluwarsa, atau halaman /stu-expired. Selain itu JANGAN vonis mati.
  try {
  const pu = new URL(pageUrl);
- if (pu.pathname === '/' || pu.pathname === '/set') {
+ if (pu.pathname === '/stu-expired') {
  return { ok: false, deadLink: true, provider: provider.name,
- error: 'Link SubUnlock-nya sudah tidak aktif -- pembuatnya menghapusnya atau masa berlakunya habis.',
+ error: 'Link SubUnlock-nya sudah kedaluwarsa -- pembuatnya mengatur masa berlaku yang sudah lewat.',
  chain, ms: Date.now() - t0 };
+ }
+ } catch (e) {}
+ try {
+ const tm = html.match(/<textarea[^>]*name=["']?link["']?[^>]*>([\s\S]*?)<\/textarea>/i);
+ if (tm) {
+ const lj = JSON.parse(tm[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#039;|&apos;/g, "'"));
+ if (lj && lj.active === false) {
+ return { ok: false, deadLink: true, provider: provider.name,
+ error: 'Link SubUnlock-nya sudah tidak aktif -- pembuatnya menonaktifkannya.',
+ chain, ms: Date.now() - t0 };
+ }
+ const b64d = (v) => { try { const s = decodeURIComponent(Buffer.from(String(v), 'base64').toString('utf8')); return s.replace(/\\u([0-9a-fA-F]{4})/g, (_, hx) => String.fromCharCode(parseInt(hx, 16))); } catch (e) { return null; } };
+ if (lj && typeof lj.original === 'string') {
+ const sp = new URLSearchParams(lj.original);
+ const expV = sp.get('exp');
+ if (expV) {
+ const expD = b64d(expV);
+ if (expD && Date.parse(expD) < Date.parse(new Date().toISOString().split('T')[0])) {
+ return { ok: false, deadLink: true, provider: provider.name,
+ error: 'Link SubUnlock-nya sudah kedaluwarsa -- pembuatnya mengatur masa berlaku yang sudah lewat.',
+ chain, ms: Date.now() - t0 };
+ }
+ }
+ let dest0 = null;
+ if (typeof lj.direct === 'string') dest0 = validHttpUrl(lj.direct);
+ if (!dest0) {
+ for (let i = 1; i <= 5; i++) {
+ const v = sp.get('lnk' + i);
+ if (!v) continue;
+ const dec = b64d(v);
+ if (dec) { dest0 = validHttpUrl(dec); if (dest0) break; }
+ }
+ }
+ if (dest0 && hostOf(dest0) !== hostOf(pageUrl)) {
+ const dh = hostOf(dest0);
+ const isShort = PROVIDERS.some(p => p.hosts.some(h => dh === h || dh.endsWith('.' + h)));
+ if (isShort) {
+ if (Date.now() < deadline - 8000) {
+ const sub = await resolveUrl(dest0, deadline, false);
+ if (sub && sub.ok && sub.destination) {
+ return { ok: true, provider: provider.name + ' → ' + sub.provider,
+ destination: sub.destination, chain: [...chain, dest0, ...sub.chain.slice(1)],
+ ms: Date.now() - t0, method: 'subunlock-set+recursive' };
+ }
+ if (sub && sub.deadLink) {
+ return { ok: false, deadLink: true, provider: provider.name + ' → ' + sub.provider,
+ error: sub.error, chain: [...chain, dest0, ...(sub.chain || []).slice(1)], ms: Date.now() - t0 };
+ }
+ if (sub && sub.needManual) {
+ return { ok: false, needManual: true, provider: provider.name + ' → ' + sub.provider,
+ manualUrl: sub.manualUrl || dest0, reason: sub.reason,
+ chain: [...chain, dest0, ...(sub.chain || []).slice(1)], ms: Date.now() - t0 };
+ }
+ return { ok: false, provider: provider.name,
+ error: 'Link SubUnlock-nya kebuka, tapi link lanjutannya (' + hostOf(dest0) + ') tidak bisa dibuka.',
+ chain: [...chain, dest0], ms: Date.now() - t0 };
+ }
+ return { ok: false, needManual: true, provider: provider.name, manualUrl: dest0,
+ reason: 'Rantai linknya panjang dan waktu server hampir habis -- mesin akan melanjutkan dari HP-mu.',
+ chain: [...chain, dest0], ms: Date.now() - t0 };
+ }
+ return { ok: true, provider: provider.name, destination: dest0,
+ chain: [...chain, dest0], ms: Date.now() - t0, method: 'subunlock-set' };
+ }
+ }
  }
  } catch (e) {}
  // sub4unlock.com diblokir Cloudflare dari IP server: ambil lewat Google
