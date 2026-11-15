@@ -247,6 +247,7 @@ public class MainActivity extends Activity {
         + "if(!indaTried&&document.getElementById('go-link')){indaTried=true;var tm=document.getElementById('timer');var secs=parseInt((tm&&tm.textContent)||'5',10);if(isNaN(secs)||secs<0)secs=5;if(secs>30)secs=30;prog('inda:tunggu '+(secs+1)+' dtk');setTimeout(indaApi,(secs+1)*1000);}"
         + "if(!readyTried&&(location.pathname.indexOf('/ready/go')>=0||document.title.indexOf('almost ready')>=0)){readyTries++;var gh=document.documentElement.innerHTML;var qc=String.fromCharCode(34);var i1=gh.indexOf('window.location.href');if(i1>=0){var q1=gh.indexOf(qc,i1);var q2=gh.indexOf(qc,q1+1);if(q1>0&&q2>q1){var rd=gh.slice(q1+1,q2).split(String.fromCharCode(92)+'/').join('/');if(rd.indexOf('http://')===0||rd.indexOf('https://')===0){readyTried=true;prog('ready:-> '+rd.slice(0,60));location.href=rd;return;}}}if(readyTries>=3){readyTried=true;prog('ready:tidak-ketemu');}}"
         + "if(tries>=3&&!window.__bpFileDone){var fh=document.documentElement.innerHTML;var qc=String.fromCharCode(34);var fi=fh.indexOf('var file');if(fi>=0){var q1=fh.indexOf(qc,fi);var q2=fh.indexOf(qc,q1+1);if(q1>0&&q2>q1){var fu=fh.slice(q1+1,q2);if(fu.indexOf('http')===0){var fl=fu.toLowerCase();var fOk=/mediafire|apkadmin|devuploads|pixeldrain|gofile|krakenfiles|buzzheavier|1fichier|uptobox|usersdrive|vikingfile|dropbox|github|romsfun|coolrom/.test(fu)||fl.indexOf('.apk')>=0||fl.indexOf('.zip')>=0||fl.indexOf('.rar')>=0||fl.indexOf('.7z')>=0||fl.indexOf('.pdf')>=0||fl.indexOf('.mp4')>=0||fl.indexOf('.mkv')>=0||fl.indexOf('.exe')>=0||fl.indexOf('.iso')>=0;if(fOk){window.__bpFileDone=true;try{window.EngineAPI.done(fu);}catch(e){}return;}}}}}"
+        + "if(tries>=3){var hh0=location.hostname;var isSub=hh0.indexOf('sub2unlock.')>=0||hh0.indexOf('sub4unlock.')>=0||hh0.indexOf('unlocksubs.')>=0;if(isSub&&(location.pathname==='/'||location.pathname==='/set')){try{window.EngineAPI.stuck('deadlink:'+hh0);}catch(e){}return;}}"
         + "if(window.__bpDanceDone&&tries>=8){var hh=location.hostname;var isSfl=hh.indexOf('besargaji.com')>=0||hh.indexOf('bahasteknologi.com')>=0||hh.indexOf('sfl.gl')>=0||hh.indexOf('safelinku.com')>=0||hh.indexOf('khaddavi.net')>=0||hh.indexOf('indapk.com')>=0;var isLocker=hh.indexOf('sub2unlock.')>=0||hh.indexOf('sub4unlock.')>=0||hh.indexOf('ouo.io')>=0||hh.indexOf('ouo.press')>=0||hh.indexOf('exe.io')>=0||hh.indexOf('adf.ly')>=0||hh.indexOf('shrinkme.')>=0||hh.indexOf('clk.sh')>=0||hh.indexOf('linkvertise.')>=0;if(isLocker){try{window.EngineAPI.stuck('locker:'+hh);}catch(e){}return;}if(!isSfl&&!document.querySelector('.slbtn')&&!document.querySelector('form[action*=redirect]')&&!document.getElementById('go-link')&&location.pathname.indexOf('/ready/go')<0){try{window.EngineAPI.done(location.href);}catch(e){}return;}}"
         + "if(!tapped){var tf=document.querySelector('iframe[src*=challenges.cloudflare]')||document.querySelector('.cf-turnstile iframe')||document.querySelector('iframe[src*=turnstile]');"
         + "if(tf){var rr=tf.getBoundingClientRect();if(rr.width>10&&rr.height>10){try{window.EngineAPI.tapAt(rr.left+22,rr.top+rr.height/2);tapped=true;window.EngineAPI.clicked('tap-turnstile');}catch(e){} return;}}}"
@@ -501,13 +502,23 @@ public class MainActivity extends Activity {
                 }
             });
         }
-        // Dipanggil skrip injeksi dari dalam halaman mesin saat Turnstile interaktif mandek.
+        // Dipanggil skrip injeksi saat mesin harus berhenti (locker / link mati).
+        // Hasilnya MEMBAWA jejak + info halaman -- dulu tidak, makanya kartu
+        // "Jejak mesin" hilang di layar Tuan saat mesin stuck (15 Nov 2026).
         @JavascriptInterface
         public void stuck(final String reason) {
             runOnUiThread(new Runnable() {
                 @Override public void run() {
                     trail("stuck:" + reason);
-                    engineFinish("{\"status\":\"error\",\"code\":\"ERR_CF_STUCK\",\"message\":\"Cloudflare minta verifikasi manual.\"}");
+                    String code = "ERR_CF_STUCK";
+                    String msg = "Cloudflare minta verifikasi manual.";
+                    if (reason != null && reason.startsWith("deadlink:")) {
+                        code = "ERR_DEAD_LINK";
+                        msg = "Link SubUnlock-nya sudah tidak aktif -- pembuatnya menghapusnya atau masa berlakunya habis.";
+                    } else if (reason != null && reason.startsWith("locker:")) {
+                        msg = "Mesin berhenti di halaman " + reason.substring(7) + " -- link aslinya tidak ketemu di sana.";
+                    }
+                    engineFinish("{\"status\":\"error\",\"code\":\"" + code + "\",\"message\":\"" + escJson(msg) + "\",\"trail\":\"" + escJson(engineTrail) + "\",\"page\":" + enginePageInfo + "}");
                 }
             });
         }
