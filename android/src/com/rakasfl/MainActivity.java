@@ -38,6 +38,8 @@ public class MainActivity extends Activity {
     // Status satu proses mesin WebView tersembunyi (hanya satu jalan dalam satu waktu).
     private String engineCb;
     private String engineHost;
+    private String engineAllowNav;
+    private int blokirLogged;
     private boolean engineBusy;
     private boolean engineDone;
     private volatile boolean danceDone;
@@ -220,6 +222,11 @@ public class MainActivity extends Activity {
     // tujuannya diekstrak langsung dari HTML, jangan done/stuck di sana) +
     // adsafelink.com (klon SFL, masuk isSfl) + yippieshare.com (file host);
     // escJson kini escape karakter kontrol (dulu newline merusak JSON jawaban mesin).
+    // v33 (15 Nov 2026): BLOKIR navigasi iklan -- mesin derail dari khaddavi
+    // ke pengalih iklan lalu situs judi sampai timeout; kini hanya navigasi
+    // se-halaman / rantai dikenal / tarian (allowNav) yang jalan. Tombol
+    // .slbtn tidak lagi diklik (tarian API yang menangani SFL); verify
+    // tanpa target dicoba ulang 1x.
     private static final String DOT = ".";
     private static final String[] DEST_HOSTS = {
         "mediafire" + DOT + "com",
@@ -250,12 +257,12 @@ public class MainActivity extends Activity {
         + "if(window.__bpEngine) return; window.__bpEngine=true;"
         + "var K=/continue|get link|download|lanjutkan|lanjut|unduh|click here|verify|verifikasi|proceed|open link|get download|dapatkan link|dapatkan|klik disini|klik di sini|buka link|ambil link|menuju link|tampilkan link|melanjutkan/i;"
         + "var KB=/^(open|next|go to link|go|lanjut|buka)$/i;"
-        + "var tries=0;var tapped=false;var lastSl='';var lastDom='';var sflTried=false;var indaTried=false;var readyTried=false;var readyTries=0;"
-        + "async function indaApi(){try{var f=document.getElementById('go-link');if(!f){prog('inda:no-form');return;}var fd=new FormData(f);var body=new URLSearchParams(fd).toString();var r=await fetch(f.action||'/links/go',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json','X-Requested-With':'XMLHttpRequest'},body:body});var j=await r.json().catch(function(){return null;});if(j&&j.status==='success'&&j.url){prog('inda:go ok');location.href=j.url;return;}prog('inda:err '+(j&&j.message?String(j.message).slice(0,20):'no-json'));}catch(e){prog('inda:exc');}}"
+        + "var tries=0;var tapped=false;var lastSl='';var lastDom='';var sflTried=false;var indaTried=false;var readyTried=false;var readyTries=0;var sflRetries=0;"
+        + "async function indaApi(){try{var f=document.getElementById('go-link');if(!f){prog('inda:no-form');return;}var fd=new FormData(f);var body=new URLSearchParams(fd).toString();var r=await fetch(f.action||'/links/go',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json','X-Requested-With':'XMLHttpRequest'},body:body});var j=await r.json().catch(function(){return null;});if(j&&j.status==='success'&&j.url){prog('inda:go ok');try{window.EngineAPI.allowNav(j.url);}catch(e){}location.href=j.url;return;}prog('inda:err '+(j&&j.message?String(j.message).slice(0,20):'no-json'));}catch(e){prog('inda:exc');}}"
         + "function prog(s){try{window.EngineAPI.progress(s);}catch(e){}}"
         + "function sflTok(){var m=document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/);if(!m)return null;var x='';try{x=decodeURIComponent(m[1]);}catch(e){x=m[1];}var u='#MmM2NWQzYmYxMThmZjc5NDY5NGZmYzNkZDM2OTE0MTkyZGM1ZTFiNjBiMmZjZTVjNDE3MGM1ZGFhMmIzMmJmNg==';return x.slice(0,128-u.length)+u;}"
         + "function sflPost(p,b){function f(){return fetch(p,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify(b)});}return f().then(function(r){if(r.status===419)return f();return r;}).then(function(r){return r.json();}).catch(function(){return null;});}"
-        + "async function sflApi(){try{var tok=sflTok();if(!tok){prog('api:no-token');return;}var sj=await sflPost('/api/session',{_token:tok});var step=sj&&sj.step;prog('api:session step='+(step==null?'?':step));if(step===2){var key=Math.floor(Math.random()*1000);var size=((window.innerWidth+key)*2)+'.'+((window.innerHeight+key)*2);var ado=null;try{ado=localStorage.getItem('ado');}catch(e){}var gj=await sflPost('/api/go',{key:key,size:size,ado:ado});var goUrl=gj&&gj.url;if(!goUrl){prog('api:no-gourl');return;}prog('api:go ok');try{var gh=await fetch(goUrl,{credentials:'same-origin'}).then(function(r){return r.text();}).catch(function(){return '';});var i1=gh.indexOf('window.location.href');if(i1>=0){var qc=String.fromCharCode(34);var q1=gh.indexOf(qc,i1);var q2=gh.indexOf(qc,q1+1);if(q1>0&&q2>q1){location.href=gh.slice(q1+1,q2).split(String.fromCharCode(92)+'/').join('/');return;}}}catch(e){}location.href=goUrl;return;}var vj=await sflPost('/api/verify',{_a:0});var target=vj&&vj.target;if(!target){prog('api:no-target');return;}prog('api:verify -> '+(target.indexOf('redirect.php')>=0?'artikel':'tujuan'));location.href=target;}catch(e){prog('api:err');}}"
+        + "async function sflApi(){try{var tok=sflTok();if(!tok){prog('api:no-token');return;}var sj=await sflPost('/api/session',{_token:tok});var step=sj&&sj.step;prog('api:session step='+(step==null?'?':step));if(step===2){var key=Math.floor(Math.random()*1000);var size=((window.innerWidth+key)*2)+'.'+((window.innerHeight+key)*2);var ado=null;try{ado=localStorage.getItem('ado');}catch(e){}var gj=await sflPost('/api/go',{key:key,size:size,ado:ado});var goUrl=gj&&gj.url;if(!goUrl){prog('api:no-gourl');return;}prog('api:go ok');try{var gh=await fetch(goUrl,{credentials:'same-origin'}).then(function(r){return r.text();}).catch(function(){return '';});var i1=gh.indexOf('window.location.href');if(i1>=0){var qc=String.fromCharCode(34);var q1=gh.indexOf(qc,i1);var q2=gh.indexOf(qc,q1+1);if(q1>0&&q2>q1){var gu=gh.slice(q1+1,q2).split(String.fromCharCode(92)+'/').join('/');try{window.EngineAPI.allowNav(gu);}catch(e){}location.href=gu;return;}}}catch(e){}try{window.EngineAPI.allowNav(goUrl);}catch(e){}location.href=goUrl;return;}var vj=await sflPost('/api/verify',{_a:0});var target=vj&&vj.target;if(!target){prog('api:no-target');if(sflRetries<2){sflRetries++;sflTried=false;}return;}prog('api:verify -> '+(target.indexOf('redirect.php')>=0?'artikel':'tujuan'));try{window.EngineAPI.allowNav(target);}catch(e){}location.href=target;}catch(e){prog('api:err');}}"
         + "setInterval(function(){"
         + "tries++;"
         + "if(tries===1){prog('js-jalan api='+(typeof window.EngineAPI));}"
@@ -267,20 +274,18 @@ public class MainActivity extends Activity {
         + "if(domKey!==lastDom){lastDom=domKey;var rs0=sl0?sl0.getBoundingClientRect():null;prog('slbtn='+(sl0?(sl0.innerText||'').trim().slice(0,20):'-')+' rect='+(rs0?Math.round(rs0.width)+'x'+Math.round(rs0.height):'-')+' cap='+(cap||'-'));}"
         + "if(!sflTried&&sl0){sflTried=true;setTimeout(sflApi,500);}"
         + "if(!indaTried&&document.getElementById('go-link')){indaTried=true;var tm=document.getElementById('timer');var secs=parseInt((tm&&tm.textContent)||'5',10);if(isNaN(secs)||secs<0)secs=5;if(secs>30)secs=30;prog('inda:tunggu '+(secs+1)+' dtk');setTimeout(indaApi,(secs+1)*1000);}"
-        + "if(!readyTried&&(location.pathname.indexOf('/ready/go')>=0||document.title.indexOf('almost ready')>=0)){readyTries++;var gh=document.documentElement.innerHTML;var qc=String.fromCharCode(34);var i1=gh.indexOf('window.location.href');if(i1>=0){var q1=gh.indexOf(qc,i1);var q2=gh.indexOf(qc,q1+1);if(q1>0&&q2>q1){var rd=gh.slice(q1+1,q2).split(String.fromCharCode(92)+'/').join('/');if(rd.indexOf('http://')===0||rd.indexOf('https://')===0){readyTried=true;prog('ready:-> '+rd.slice(0,60));location.href=rd;return;}}}if(readyTries>=3){readyTried=true;prog('ready:tidak-ketemu');}}"
+        + "if(!readyTried&&(location.pathname.indexOf('/ready/go')>=0||document.title.indexOf('almost ready')>=0)){readyTries++;var gh=document.documentElement.innerHTML;var qc=String.fromCharCode(34);var i1=gh.indexOf('window.location.href');if(i1>=0){var q1=gh.indexOf(qc,i1);var q2=gh.indexOf(qc,q1+1);if(q1>0&&q2>q1){var rd=gh.slice(q1+1,q2).split(String.fromCharCode(92)+'/').join('/');if(rd.indexOf('http://')===0||rd.indexOf('https://')===0){readyTried=true;prog('ready:-> '+rd.slice(0,60));try{window.EngineAPI.allowNav(rd);}catch(e){}location.href=rd;return;}}}if(readyTries>=3){readyTried=true;prog('ready:tidak-ketemu');}}"
         + "if(tries>=3&&!window.__bpFileDone){var fh=document.documentElement.innerHTML;var qc=String.fromCharCode(34);var fi=fh.indexOf('var file');if(fi>=0){var q1=fh.indexOf(qc,fi);var q2=fh.indexOf(qc,q1+1);if(q1>0&&q2>q1){var fu=fh.slice(q1+1,q2);if(fu.indexOf('http')===0){var fl=fu.toLowerCase();var fOk=/mediafire|apkadmin|devuploads|pixeldrain|gofile|krakenfiles|buzzheavier|1fichier|uptobox|usersdrive|vikingfile|dropbox|github|romsfun|coolrom|yippieshare/.test(fu)||fl.indexOf('.apk')>=0||fl.indexOf('.zip')>=0||fl.indexOf('.rar')>=0||fl.indexOf('.7z')>=0||fl.indexOf('.pdf')>=0||fl.indexOf('.mp4')>=0||fl.indexOf('.mkv')>=0||fl.indexOf('.exe')>=0||fl.indexOf('.iso')>=0;if(fOk){window.__bpFileDone=true;try{window.EngineAPI.done(fu);}catch(e){}return;}}}}}"
         + "if(tries>=3){var hh0=location.hostname;var isSub=hh0.indexOf('sub2unlock.')>=0||hh0.indexOf('sub4unlock.')>=0||hh0.indexOf('unlocksubs.')>=0;if(isSub&&(location.pathname==='/'||location.pathname==='/set')){try{window.EngineAPI.stuck('deadlink:'+hh0);}catch(e){}return;}}"
-        + "if(tries>=3){var hhT=location.hostname;if(hhT.indexOf('tlkm'+'.id')>=0&&!window.__bpTlkmDone){window.__bpTlkmDone=true;var th=document.documentElement.innerHTML;var q2c=String.fromCharCode(34);var p0=0;while(true){var li=th.indexOf('window.location.href',p0);if(li<0)break;var q1=th.indexOf(q2c,li);var q2=th.indexOf(q2c,q1+1);if(q1<0||q2<=q1)break;var tu=th.slice(q1+1,q2).split(String.fromCharCode(92)+'/').join('/');p0=q2+1;if(tu.indexOf('http')===0&&tu.indexOf('tlkm'+'.id')<0){prog('tlkm:-> '+tu.slice(0,60));location.href=tu;break;}}}}"
+        + "if(tries>=3){var hhT=location.hostname;if(hhT.indexOf('tlkm'+'.id')>=0&&!window.__bpTlkmDone){window.__bpTlkmDone=true;var th=document.documentElement.innerHTML;var q2c=String.fromCharCode(34);var p0=0;while(true){var li=th.indexOf('window.location.href',p0);if(li<0)break;var q1=th.indexOf(q2c,li);var q2=th.indexOf(q2c,q1+1);if(q1<0||q2<=q1)break;var tu=th.slice(q1+1,q2).split(String.fromCharCode(92)+'/').join('/');p0=q2+1;if(tu.indexOf('http')===0&&tu.indexOf('tlkm'+'.id')<0){prog('tlkm:-> '+tu.slice(0,60));try{window.EngineAPI.allowNav(tu);}catch(e){}location.href=tu;break;}}}}"
         + "if(window.__bpDanceDone&&tries>=8&&location.hostname.indexOf('tlkm'+'.id')<0){var hh=location.hostname;var isSfl=hh.indexOf('besargaji.com')>=0||hh.indexOf('bahasteknologi.com')>=0||hh.indexOf('sfl.gl')>=0||hh.indexOf('safelinku.com')>=0||hh.indexOf('khaddavi.net')>=0||hh.indexOf('indapk.com')>=0||hh.indexOf('adsafelink'+'.com')>=0||hh.indexOf('gociwidey'+'.com')>=0;var isLocker=hh.indexOf('sub2unlock.')>=0||hh.indexOf('sub4unlock.')>=0||hh.indexOf('ouo.io')>=0||hh.indexOf('ouo.press')>=0||hh.indexOf('exe.io')>=0||hh.indexOf('adf.ly')>=0||hh.indexOf('shrinkme.')>=0||hh.indexOf('clk.sh')>=0||hh.indexOf('linkvertise.')>=0;if(isLocker){try{window.EngineAPI.stuck('locker:'+hh);}catch(e){}return;}if(!isSfl&&!document.querySelector('.slbtn')&&!document.querySelector('form[action*=redirect]')&&!document.getElementById('go-link')&&location.pathname.indexOf('/ready/go')<0){try{window.EngineAPI.done(location.href);}catch(e){}return;}}"
         + "if(!tapped){var tf=document.querySelector('iframe[src*=challenges.cloudflare]')||document.querySelector('.cf-turnstile iframe')||document.querySelector('iframe[src*=turnstile]');"
         + "if(tf){var rr=tf.getBoundingClientRect();if(rr.width>10&&rr.height>10){try{window.EngineAPI.tapAt(rr.left+22,rr.top+rr.height/2);tapped=true;window.EngineAPI.clicked('tap-turnstile');}catch(e){} return;}}}"
-        + "var sl=document.querySelector('button.slbtn, .slbtn');"
-        + "if(sl){var lbl=(sl.innerText||'').trim();"
-        + "if(!/wait/i.test(lbl)&&lbl!==lastSl){lastSl=lbl;try{sl.scrollIntoView();}catch(e){}try{sl.click();window.EngineAPI.clicked('slbtn:'+lbl.slice(0,30));}catch(e){}}"
-        + "return;}"
+        + "/* v33: halaman SFL ditangani tarian API saja -- jangan klik apa pun di sini. */"
+        + "if(document.querySelector('.slbtn')){return;}"
         + "var els=document.querySelectorAll('a,button,input[type=submit],input[type=button],[role=button]');"
         + "for(var i=0;i<els.length;i++){"
-        + "var el=els[i]; var t=(el.textContent||el.value||'').trim();"
+        + "var el=els[i]; try{if(el.closest&&el.closest('.slbtn'))continue;}catch(e){} var t=(el.textContent||el.value||'').trim();"
         + "var isBtn=(el.tagName==='BUTTON'||el.tagName==='INPUT');"
         + "if(!t||!(K.test(t)||(isBtn&&KB.test(t)))) continue;"
         + "var r=el.getBoundingClientRect();"
@@ -288,7 +293,7 @@ public class MainActivity extends Activity {
         + "try{el.click(); window.EngineAPI.clicked(t.slice(0,40));}catch(e){} return;}"
         + "var els2=document.querySelectorAll('[id*=continue],[id*=download],[class*=continue],[class*=download]');"
         + "for(var j=0;j<els2.length;j++){"
-        + "var el2=els2[j];"
+        + "var el2=els2[j]; try{if(el2.closest&&el2.closest('.slbtn'))continue;}catch(e){}"
         + "var r2=el2.getBoundingClientRect();"
         + "if(r2.width<2||r2.height<2) continue;"
         + "try{el2.click(); window.EngineAPI.clicked('cls:'+(el2.id||el2.className||'').toString().slice(0,30));}catch(e){} return;}"
@@ -296,6 +301,7 @@ public class MainActivity extends Activity {
         + "var best=null,bestArea=0;"
         + "var all=document.querySelectorAll('a,button,[role=button]');"
         + "for(var k=0;k<all.length;k++){"
+        + "try{if(all[k].closest&&all[k].closest('.slbtn'))continue;}catch(e){}"
         + "var r=all[k].getBoundingClientRect();"
         + "var a=r.width*r.height;"
         + "if(r.width>=40&&r.height>=20&&a>bestArea){best=all[k];bestArea=a;}}"
@@ -329,6 +335,56 @@ public class MainActivity extends Activity {
         return h.length() > 0 && (h.equals(engineHost) || h.endsWith(DOT + engineHost)
             || engineHost.endsWith(DOT + h));
     }
+    // Host rantai bypass yang dikenal (keluarga SFL + shortener + loker).
+    // Navigasi mesin ke host di luar daftar ini + di luar halaman yang
+    // sedang dibuka dianggap iklan/pengalih dan DIBLOKIR (v33).
+    private static final String[] CHAIN_HOSTS = {
+        "besargaji.com",
+        "bahasteknologi.com",
+        "sfl.gl",
+        "safelinku.com",
+        "khaddavi.net",
+        "indapk.com",
+        "adsafelink" + DOT + "com",
+        "gociwidey" + DOT + "com",
+        "tlkm" + DOT + "id",
+        "sub2unlock.com",
+        "sub2unlock.id",
+        "sub2unlock.io",
+        "sub2unlock.me",
+        "sub4unlock.com",
+        "sub4unlock.co",
+        "sub4unlock.io",
+        "sub4unlock.id",
+        "sub4unlock.me",
+        "unlocksubs.com",
+        "ouo.io",
+        "ouo.press",
+        "exe.io",
+        "adf.ly",
+        "adfoc.us",
+        "shrinkme.io",
+        "clk.sh",
+        "tpi.li",
+        "linkvertise.com"
+    };
+    private boolean isChainUrl(String url) {
+        String h = hostOf(url);
+        if (h.length() == 0) return false;
+        for (String d : CHAIN_HOSTS) {
+            if (h.equals(d) || h.endsWith(DOT + d)) return true;
+        }
+        return false;
+    }
+    // Navigasi ke host yang sama dengan halaman yang sedang dibuka mesin
+    // (mis. form redirect.php di klon SFL baru yang belum dikenal).
+    private boolean isCurrentHost(String url) {
+        String h = hostOf(url);
+        String cur = "";
+        try { cur = hostOf(engineWv.getUrl()); } catch (Exception e) {}
+        return h.length() > 0 && cur.length() > 0
+            && (h.equals(cur) || h.endsWith(DOT + cur) || cur.endsWith(DOT + h));
+    }
 
     private void engineFinish(String json) {
         if (engineDone) return;
@@ -355,6 +411,8 @@ public class MainActivity extends Activity {
         danceDone = false;
         engineBusy = true;
         engineTrail = "";
+        engineAllowNav = null;
+        blokirLogged = 0;
         trail("mulai:" + hostOf(url));
         if (engineWv == null) {
             engineWv = new WebView(MainActivity.this);
@@ -385,8 +443,11 @@ public class MainActivity extends Activity {
                             trail("popup:" + hostOf(u));
                             if (isDestUrl(u)) {
                                 engineFinish("{\"status\":\"success\",\"result\":\"" + escJson(u) + "\"}");
-                            } else if (!isSameShortener(u)) {
+                            } else if (isSameShortener(u) || isCurrentHost(u) || isChainUrl(u)) {
                                 engineWv.loadUrl(u);
+                            } else if (blokirLogged < 5) {
+                                trail("blokir-popup:" + hostOf(u));
+                                blokirLogged++;
                             }
                             return true;
                         }
@@ -404,12 +465,21 @@ public class MainActivity extends Activity {
                     if (u == null) return true;
                     if (!u.startsWith("http")) return true;
                     trail("nav:" + hostOf(u));
-                    if (isSameShortener(u)) return false; // navigasi internal shortener: biarkan jalan
                     if (isDestUrl(u)) {
                         engineFinish("{\"status\":\"success\",\"result\":\"" + u.replace("\\", "\\\\").replace("\"", "\\\"") + "\"}");
                         return true;
                     }
-                    return false; // hop perantara (halaman iklan): biarkan dimuat, mesin terus mengawasi
+                    if (isCurrentHost(u)) return false; // navigasi di halaman yang sama (form dsb.)
+                    if (isSameShortener(u)) return false; // navigasi internal shortener: biarkan jalan
+                    if (engineAllowNav != null && (u.equals(engineAllowNav) || u.startsWith(engineAllowNav))) {
+                        engineAllowNav = null; // navigasi tarian (satu kali, URL persis)
+                        return false;
+                    }
+                    if (isChainUrl(u)) return false; // hop rantai yang dikenal
+                    // Host asing di luar rantai = iklan/pengalih: BLOKIR.
+                    // Mesin tetap di halaman bagus dan tariannya jalan terus.
+                    if (blokirLogged < 5) { trail("blokir:" + hostOf(u)); blokirLogged++; }
+                    return true;
                 }
                 @Override
                 public void onPageFinished(WebView v, String u) {
@@ -475,6 +545,12 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void clicked(final String text) {
             trail("klik:" + text);
+        }
+        // Dipanggil tarian JS sebelum navigasi (location.href): navigasi
+        // tarian diizinkan sekali ke URL persis ini, walau host-nya baru.
+        @JavascriptInterface
+        public void allowNav(final String url) {
+            if (url != null && url.startsWith("http")) engineAllowNav = url;
         }
         // Dipanggil skrip injeksi saat DOM berubah (label tombol SFL, CAPTCHA muncul).
         // Masuk jejak juga, supaya loop reload tahu halaman masih hidup.
