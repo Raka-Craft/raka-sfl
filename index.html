@@ -645,7 +645,7 @@ try { if (window.AppInfo && typeof window.AppInfo.version === 'function') { cons
 function engineViaNative(u) {
   return new Promise((resolve) => {
     let done = false;
-    const to = setTimeout(() => { if (!done) { done = true; resolve({ status: 'error', code: 'ERR_TIMEOUT' }); } }, 150000);
+    const to = setTimeout(() => { if (!done) { done = true; resolve({ status: 'error', code: 'ERR_TIMEOUT', message: 'Mesinnya tidak menjawab sama sekali (lebih dari 2 menit).' }); } }, 150000);
     window.__engineCb = function (s) {
       if (done) return; done = true; clearTimeout(to);
       try { resolve(JSON.parse(s)); } catch (e) { resolve({ status: 'error', code: 'ERR_BADJSON' }); }
@@ -842,7 +842,7 @@ function stepsDone(ok, responded) {
 }
 /* Host locker/shortener: URL di host ini BUKAN link asli -- jangan pernah
    ditampilkan sebagai LINK ASLI (pernah kejadian: sub2unlock.id/set). */
-const LOCKER_HOSTS = ['sub2unlock.', 'sub4unlock.', 'sfl.gl', 'safelinku.com', 'besargaji.com', 'bahasteknologi.com', 'ouo.io', 'ouo.press', 'exe.io', 'adf.ly', 'adfoc.us', 'shrinkme.', 'clk.sh', 'tpi.li', 'linkvertise.', 'bit.ly', 'tinyurl.com', 'cutt.ly', 'is.gd', 'translate.goog', 'translate.google.com'];
+const LOCKER_HOSTS = ['sub2unlock.', 'sub4unlock.', 'sfl.gl', 'safelinku.com', 'besargaji.com', 'bahasteknologi.com', 'ouo.io', 'ouo.press', 'exe.io', 'adf.ly', 'adfoc.us', 'shrinkme.', 'clk.sh', 'tpi.li', 'linkvertise.', 'bit.ly', 'tinyurl.com', 'cutt.ly', 'is.gd', 'translate.goog', 'translate.google.com', 'tlkm'+'.id', 'adsafelink'+'.com'];
 function isLockerUrl(u) {
   try {
     const h = new URL(u).hostname.toLowerCase().replace(/^www\./, '');
@@ -888,7 +888,19 @@ async function fetchJsonWithRetry(url) {
 async function bypassOne(u) {
   return await fetchJsonWithRetry(API + '/api/resolve?url=' + encodeURIComponent(u));
 }
+/* v32: cegah dua bypass jalan bersamaan -- dulu ketuk kedua langsung kena
+   ERR_BUSY tanpa jejak dan hasil bypass pertama hilang (layar Tuan 15 Nov). */
+let bypassRunning = false;
 async function runBypass(list) {
+  if (bypassRunning) return;
+  bypassRunning = true;
+  try { $('go').disabled = true; $('goBatch').disabled = true; } catch (e) {}
+  try { await runBypassInner(list); } finally {
+    bypassRunning = false;
+    try { $('go').disabled = false; $('goBatch').disabled = false; } catch (e) {}
+  }
+}
+async function runBypassInner(list) {
   $('homeRes').innerHTML = '';
   $('procBox').style.display = 'block';
   $('procBox').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -989,7 +1001,8 @@ async function runBypass(list) {
         // Sampai sini berarti mesin gagal / tidak ada mesin: barulah ini gagal.
         // Pesan mesin lebih akurat daripada alasan server (mis. mesin yang
         // menemukan linknya mati) -- utamakan pesan mesin bila ada.
-        const emsg = (eg && eg.message) ? eg.message : (d.reason || d.error || 'Gagal');
+        const EG_MSG = { ERR_BUSY: 'Mesin masih sibuk mengerjakan bypass sebelumnya -- tunggu sampai selesai, lalu coba lagi.', ERR_TIMEOUT: 'Mesinnya kelamaan nunggu halaman (lebih dari 2 menit).', ERR_NATIVE: 'Mesin WebView-nya tidak bisa dibuka.', ERR_BADJSON: 'Mesinnya menjawab tapi jawabannya rusak -- coba lagi.' };
+        const emsg = (eg && eg.message) ? eg.message : ((eg && EG_MSG[eg.code]) || d.reason || d.error || 'Gagal');
         hadError = true;
         stats(false, d.ms);
         setLastTry(u, false, emsg);

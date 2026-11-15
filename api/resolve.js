@@ -6,7 +6,8 @@ const PROVIDERS = [
  { hosts: ['ouo.io', 'ouo.press'], name: 'Ouo.io', fn: 'ouo' },
  { hosts: ['exe.io', 'exeo.app'], name: 'Exe.io', fn: 'ouoLike' },
  { hosts: ['linkvertise.com', 'linkvertise.net'], name: 'Linkvertise', fn: 'manual', reason: 'Linkvertise tidak didukung di BypassPro (dihapus atas permintaan Raka — terlalu susah, butuh key yang cuma berlaku 24 jam).' },
- { hosts: ['sfl.gl', 'safelinku.com', 'besargaji.com', 'bahasteknologi.com'], name: 'SafelinkU', fn: 'safelinku' },
+ { hosts: ['sfl.gl', 'safelinku.com', 'besargaji.com', 'bahasteknologi.com', 'adsafelink'+'.com'], name: 'SafelinkU', fn: 'safelinku' },
+ { hosts: ['tlkm'+'.id'], name: 'Tlkm.id', fn: 'generic' },
  { hosts: ['sub4unlock.com', 'sub4unlock.co', 'sub4unlock.io', 'sub4unlock.id', 'sub4unlock.me', 'sub2unlock.com', 'sub2unlock.id', 'sub2unlock.io', 'sub2unlock.me', 'unlocksubs.com'], name: 'SubUnlock', fn: 'subunlock' },
  { hosts: ['clk.sh','oko.sh','oii.la','clksz.com'], name: 'Clk.sh', fn: 'manual', reason: 'Clk.sh wajib verifikasi CAPTCHA (Cloudflare Turnstile) yang cuma bisa diselesaikan manusia.' },
  { hosts: ['bit.ly','bitly.is','j.mp','amzn.to'], name: 'Bitly', fn: 'generic' },
@@ -182,7 +183,7 @@ function base64Candidates(html) {
 
 const AD_DOMAINS = ['google', 'facebook', 'doubleclick', 'googlesyndication', 'analytics', 'adsystem', 'adservice', 'taboola', 'outbrain', 'mgid', 'revcontent', 'popads', 'popcash', 'adcash', 'propeller', 'exoclick', 'adnxs', 'criteo', 'hotjar', 'cloudflare', 'hcaptcha', 'recaptcha', 'gstatic', 'schema.org', 'w3.org', 'youtube.com', 'youtu.be'];
 
-const FILE_HOSTS=['mediafire.com','apkadmin'+'.com','drive.google.com','github.com','mega'+'.nz','pixeldrain'+'.com','gofile'+'.io','krakenfiles'+'.com','buzzheavier'+'.com','uptobox'+'.com','1fichier'+'.com','send'+'.cm','usersdrive'+'.com','dropbox'+'.com','vikingfile'+'.com','vik1ngfile'+'.site','devuploads'+'.com'];
+const FILE_HOSTS=['mediafire.com','apkadmin'+'.com','drive.google.com','github.com','mega'+'.nz','pixeldrain'+'.com','gofile'+'.io','krakenfiles'+'.com','buzzheavier'+'.com','uptobox'+'.com','1fichier'+'.com','send'+'.cm','usersdrive'+'.com','dropbox'+'.com','vikingfile'+'.com','vik1ngfile'+'.site','devuploads'+'.com','yippieshare'+'.com'];
 const MEDIAFIRE_FIRST = true;
 
 function isSuspiciousAdHost(host) {
