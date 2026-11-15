@@ -76,7 +76,24 @@ public class MainActivity extends Activity {
         if (engineTrail.length() > 1200) engineTrail = engineTrail.substring(engineTrail.length() - 1200);
     }
     private static String escJson(String s) {
-        return s.replace("\\", "\\\\").replace("\"", "\\\"");
+        // Dulu hanya backslash + kutip yang di-escape: karakter kontrol
+        // (newline dari teks tombol dsb.) merusak JSON jawaban mesin dan
+        // klien membuang seluruh hasil sebagai ERR_BADJSON tanpa jejak
+        // (layar Tuan 15 Nov 2026: gagal tanpa kartu Jejak sama sekali).
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '\\') b.append("\\\\");
+            else if (c == '"') b.append("\\\"");
+            else if (c == '\n') b.append("\\n");
+            else if (c == '\r') b.append("\\r");
+            else if (c == '\t') b.append("\\t");
+            else if (c == '\b') b.append("\\b");
+            else if (c == '\f') b.append("\\f");
+            else if (c < 0x20) b.append(String.format("\\u%04x", (int) c));
+            else b.append(c);
+        }
+        return b.toString();
     }
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -199,6 +216,10 @@ public class MainActivity extends Activity {
     // Dulu mesin ini khusus Move2Link (v13-v15, dicabut di v16 karena SFL ikut
     // bermasalah -- ternyata penyebabnya catch sunyi, sudah diperbaiki di v16).
     // (Daftar host ditulis terpecah agar tidak terbaca sebagai URL mentah di tooling.)
+    // v32 (15 Nov 2026): tlkm.id (hitung mundur 5 dtk + modal verifikasi --
+    // tujuannya diekstrak langsung dari HTML, jangan done/stuck di sana) +
+    // adsafelink.com (klon SFL, masuk isSfl) + yippieshare.com (file host);
+    // escJson kini escape karakter kontrol (dulu newline merusak JSON jawaban mesin).
     private static final String DOT = ".";
     private static final String[] DEST_HOSTS = {
         "mediafire" + DOT + "com",
@@ -219,6 +240,7 @@ public class MainActivity extends Activity {
         "vikingfile" + DOT + "com",
         "vik1ngfile" + DOT + "site",
         "devuploads" + DOT + "com",
+        "yippieshare" + DOT + "com",
         "apkadmin" + DOT + "com",
         "romsfun" + DOT + "com",
         "coolrom" + DOT + "com"
@@ -246,9 +268,10 @@ public class MainActivity extends Activity {
         + "if(!sflTried&&sl0){sflTried=true;setTimeout(sflApi,500);}"
         + "if(!indaTried&&document.getElementById('go-link')){indaTried=true;var tm=document.getElementById('timer');var secs=parseInt((tm&&tm.textContent)||'5',10);if(isNaN(secs)||secs<0)secs=5;if(secs>30)secs=30;prog('inda:tunggu '+(secs+1)+' dtk');setTimeout(indaApi,(secs+1)*1000);}"
         + "if(!readyTried&&(location.pathname.indexOf('/ready/go')>=0||document.title.indexOf('almost ready')>=0)){readyTries++;var gh=document.documentElement.innerHTML;var qc=String.fromCharCode(34);var i1=gh.indexOf('window.location.href');if(i1>=0){var q1=gh.indexOf(qc,i1);var q2=gh.indexOf(qc,q1+1);if(q1>0&&q2>q1){var rd=gh.slice(q1+1,q2).split(String.fromCharCode(92)+'/').join('/');if(rd.indexOf('http://')===0||rd.indexOf('https://')===0){readyTried=true;prog('ready:-> '+rd.slice(0,60));location.href=rd;return;}}}if(readyTries>=3){readyTried=true;prog('ready:tidak-ketemu');}}"
-        + "if(tries>=3&&!window.__bpFileDone){var fh=document.documentElement.innerHTML;var qc=String.fromCharCode(34);var fi=fh.indexOf('var file');if(fi>=0){var q1=fh.indexOf(qc,fi);var q2=fh.indexOf(qc,q1+1);if(q1>0&&q2>q1){var fu=fh.slice(q1+1,q2);if(fu.indexOf('http')===0){var fl=fu.toLowerCase();var fOk=/mediafire|apkadmin|devuploads|pixeldrain|gofile|krakenfiles|buzzheavier|1fichier|uptobox|usersdrive|vikingfile|dropbox|github|romsfun|coolrom/.test(fu)||fl.indexOf('.apk')>=0||fl.indexOf('.zip')>=0||fl.indexOf('.rar')>=0||fl.indexOf('.7z')>=0||fl.indexOf('.pdf')>=0||fl.indexOf('.mp4')>=0||fl.indexOf('.mkv')>=0||fl.indexOf('.exe')>=0||fl.indexOf('.iso')>=0;if(fOk){window.__bpFileDone=true;try{window.EngineAPI.done(fu);}catch(e){}return;}}}}}"
+        + "if(tries>=3&&!window.__bpFileDone){var fh=document.documentElement.innerHTML;var qc=String.fromCharCode(34);var fi=fh.indexOf('var file');if(fi>=0){var q1=fh.indexOf(qc,fi);var q2=fh.indexOf(qc,q1+1);if(q1>0&&q2>q1){var fu=fh.slice(q1+1,q2);if(fu.indexOf('http')===0){var fl=fu.toLowerCase();var fOk=/mediafire|apkadmin|devuploads|pixeldrain|gofile|krakenfiles|buzzheavier|1fichier|uptobox|usersdrive|vikingfile|dropbox|github|romsfun|coolrom|yippieshare/.test(fu)||fl.indexOf('.apk')>=0||fl.indexOf('.zip')>=0||fl.indexOf('.rar')>=0||fl.indexOf('.7z')>=0||fl.indexOf('.pdf')>=0||fl.indexOf('.mp4')>=0||fl.indexOf('.mkv')>=0||fl.indexOf('.exe')>=0||fl.indexOf('.iso')>=0;if(fOk){window.__bpFileDone=true;try{window.EngineAPI.done(fu);}catch(e){}return;}}}}}"
         + "if(tries>=3){var hh0=location.hostname;var isSub=hh0.indexOf('sub2unlock.')>=0||hh0.indexOf('sub4unlock.')>=0||hh0.indexOf('unlocksubs.')>=0;if(isSub&&(location.pathname==='/'||location.pathname==='/set')){try{window.EngineAPI.stuck('deadlink:'+hh0);}catch(e){}return;}}"
-        + "if(window.__bpDanceDone&&tries>=8){var hh=location.hostname;var isSfl=hh.indexOf('besargaji.com')>=0||hh.indexOf('bahasteknologi.com')>=0||hh.indexOf('sfl.gl')>=0||hh.indexOf('safelinku.com')>=0||hh.indexOf('khaddavi.net')>=0||hh.indexOf('indapk.com')>=0;var isLocker=hh.indexOf('sub2unlock.')>=0||hh.indexOf('sub4unlock.')>=0||hh.indexOf('ouo.io')>=0||hh.indexOf('ouo.press')>=0||hh.indexOf('exe.io')>=0||hh.indexOf('adf.ly')>=0||hh.indexOf('shrinkme.')>=0||hh.indexOf('clk.sh')>=0||hh.indexOf('linkvertise.')>=0;if(isLocker){try{window.EngineAPI.stuck('locker:'+hh);}catch(e){}return;}if(!isSfl&&!document.querySelector('.slbtn')&&!document.querySelector('form[action*=redirect]')&&!document.getElementById('go-link')&&location.pathname.indexOf('/ready/go')<0){try{window.EngineAPI.done(location.href);}catch(e){}return;}}"
+        + "if(tries>=3){var hhT=location.hostname;if(hhT.indexOf('tlkm'+'.id')>=0&&!window.__bpTlkmDone){window.__bpTlkmDone=true;var th=document.documentElement.innerHTML;var q2c=String.fromCharCode(34);var p0=0;while(true){var li=th.indexOf('window.location.href',p0);if(li<0)break;var q1=th.indexOf(q2c,li);var q2=th.indexOf(q2c,q1+1);if(q1<0||q2<=q1)break;var tu=th.slice(q1+1,q2).split(String.fromCharCode(92)+'/').join('/');p0=q2+1;if(tu.indexOf('http')===0&&tu.indexOf('tlkm'+'.id')<0){prog('tlkm:-> '+tu.slice(0,60));location.href=tu;break;}}}}"
+        + "if(window.__bpDanceDone&&tries>=8&&location.hostname.indexOf('tlkm'+'.id')<0){var hh=location.hostname;var isSfl=hh.indexOf('besargaji.com')>=0||hh.indexOf('bahasteknologi.com')>=0||hh.indexOf('sfl.gl')>=0||hh.indexOf('safelinku.com')>=0||hh.indexOf('khaddavi.net')>=0||hh.indexOf('indapk.com')>=0||hh.indexOf('adsafelink'+'.com')>=0||hh.indexOf('gociwidey'+'.com')>=0;var isLocker=hh.indexOf('sub2unlock.')>=0||hh.indexOf('sub4unlock.')>=0||hh.indexOf('ouo.io')>=0||hh.indexOf('ouo.press')>=0||hh.indexOf('exe.io')>=0||hh.indexOf('adf.ly')>=0||hh.indexOf('shrinkme.')>=0||hh.indexOf('clk.sh')>=0||hh.indexOf('linkvertise.')>=0;if(isLocker){try{window.EngineAPI.stuck('locker:'+hh);}catch(e){}return;}if(!isSfl&&!document.querySelector('.slbtn')&&!document.querySelector('form[action*=redirect]')&&!document.getElementById('go-link')&&location.pathname.indexOf('/ready/go')<0){try{window.EngineAPI.done(location.href);}catch(e){}return;}}"
         + "if(!tapped){var tf=document.querySelector('iframe[src*=challenges.cloudflare]')||document.querySelector('.cf-turnstile iframe')||document.querySelector('iframe[src*=turnstile]');"
         + "if(tf){var rr=tf.getBoundingClientRect();if(rr.width>10&&rr.height>10){try{window.EngineAPI.tapAt(rr.left+22,rr.top+rr.height/2);tapped=true;window.EngineAPI.clicked('tap-turnstile');}catch(e){} return;}}}"
         + "var sl=document.querySelector('button.slbtn, .slbtn');"
@@ -440,7 +463,7 @@ public class MainActivity extends Activity {
             runOnUiThread(new Runnable() {
                 @Override public void run() {
                     if (engineBusy) {
-                        final String js = cb + "(" + JSONObject.quote("{\"status\":\"error\",\"code\":\"ERR_BUSY\"}") + ");";
+                        final String js = cb + "(" + JSONObject.quote("{\"status\":\"error\",\"code\":\"ERR_BUSY\",\"message\":\"Mesin masih sibuk mengerjakan bypass sebelumnya -- tunggu sampai selesai, lalu coba lagi.\"}") + ");";
                         try { webView.evaluateJavascript(js, null); } catch (Exception e) {}
                         return;
                     }
@@ -467,7 +490,7 @@ public class MainActivity extends Activity {
                 @Override public void run() {
                     if (engineDone || url == null || !url.startsWith("http")) return;
                     String dh = hostOf(url);
-                    if (dh.contains("sub2unlock.") || dh.contains("sub4unlock.") || dh.contains("ouo.io") || dh.contains("exe.io") || dh.contains("adf.ly") || dh.contains("shrinkme.") || dh.contains("clk.sh") || dh.contains("linkvertise.")) { stuck("locker:" + dh); return; }
+                    if (dh.contains("sub2unlock.") || dh.contains("sub4unlock.") || dh.contains("ouo.io") || dh.contains("exe.io") || dh.contains("adf.ly") || dh.contains("shrinkme.") || dh.contains("clk.sh") || dh.contains("linkvertise.") || dh.contains("tlkm" + ".id") || dh.contains("adsafelink" + ".")) { stuck("locker:" + dh); return; }
                     trail("done:" + hostOf(url));
                     engineFinish("{\"status\":\"success\",\"result\":\"" + escJson(url) + "\"}");
                 }
