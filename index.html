@@ -827,13 +827,17 @@ function stepsStart() {
   mark(0);
   stepTimer = setInterval(() => { if (++cur < STEPS.length) mark(cur); }, 2600);
 }
-function stepsDone(ok) {
+function stepsDone(ok, responded) {
   clearInterval(stepTimer);
   $('pbar').classList.remove('on');
-  document.querySelectorAll('#steps .step').forEach(el => {
+  document.querySelectorAll('#steps .step').forEach((el, j) => {
     el.classList.remove('active'); el.classList.add('done');
-    el.querySelector('.dot').innerHTML = ic(ok ? 'check' : 'x', 13);
-    if (!ok) el.style.color = '#fca5a5';
+    // Jujur: langkah 1 centang hanya kalau server benar-benar merespons;
+    // langkah 2-5 centang hanya kalau bypass berhasil. Timer selama proses
+    // hanyalah animasi -- hasil akhir tidak boleh ikut-ikutan animasi.
+    const done = ok || (responded && j === 0);
+    el.querySelector('.dot').innerHTML = ic(done ? 'check' : 'x', 13);
+    el.style.color = done ? '' : '#fca5a5';
   });
 }
 /* Host locker/shortener: URL di host ini BUKAN link asli -- jangan pernah
@@ -890,6 +894,7 @@ async function runBypass(list) {
   $('procBox').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   stepsStart();
   let hadError = false;
+  let serverResponded = false;
   for (const u of list) {
     const cached = getCache(u);
     if (cached) {
@@ -919,6 +924,7 @@ async function runBypass(list) {
       d = skipServer
         ? { ok: false, needManual: true, reason: 'Situs ini dilindungi Cloudflare dari server. Mesin WebView mencoba otomatis dari HP-mu.', manualUrl: u }
         : await bypassOne(u);
+      if (!skipServer) serverResponded = true;
       if (d.ok) {
         const show0 = d.finalUrl || d.destination;
         if (show0 && isLockerUrl(show0)) {
@@ -952,6 +958,7 @@ async function runBypass(list) {
         }
         buzz(); autoCopyTxt(show);
       } else {
+        let eg = null;
         if (d.needManual && window.EngineAPI && typeof window.EngineAPI.resolve === 'function') {
           const busy = document.createElement('div');
           busy.className = 'card';
@@ -960,7 +967,7 @@ async function runBypass(list) {
           // Mesin mulai dari lompatan terjauh yang sudah dicapai server
           // (manualUrl), bukan mengulang dari link awal -- mis. server sudah
           // membuka SubUnlock sampai ke link SFL, mesin langsung lanjut dari SFL.
-          const eg = await engineViaNative(d.manualUrl || u);
+          eg = await engineViaNative(d.manualUrl || u);
           busy.remove();
           if (eg && eg.status === 'success' && eg.result && !isLockerUrl(eg.result)) {
             setLastTry(u, true);
@@ -980,14 +987,17 @@ async function runBypass(list) {
           }
         }
         // Sampai sini berarti mesin gagal / tidak ada mesin: barulah ini gagal.
+        // Pesan mesin lebih akurat daripada alasan server (mis. mesin yang
+        // menemukan linknya mati) -- utamakan pesan mesin bila ada.
+        const emsg = (eg && eg.message) ? eg.message : (d.reason || d.error || 'Gagal');
         hadError = true;
         stats(false, d.ms);
-        setLastTry(u, false, d.reason || d.error || 'Gagal');
+        setLastTry(u, false, emsg);
         const e = document.createElement('div');
         e.className = 'card err-card';
         if (d.needManual) {
           e.innerHTML = '<div class="err-msg">' + ic('alert', 18) + '<span>' +
-            esc(d.reason || 'Link ini butuh verifikasi manual.') + '</span></div>' +
+            esc(emsg) + '</span></div>' +
             '<div class="act-row"><a class="act main" target="_blank" rel="noopener" href="' + esc(d.manualUrl || u) + '">Buka di Browser</a></div>' +
             '<button class="btn primary">' + ic('refresh', 17) + 'Coba Lagi</button>';
         } else {
@@ -1012,10 +1022,10 @@ async function runBypass(list) {
         '<button class="btn primary">' + ic('refresh', 17) + 'Coba Lagi</button>';
       e2.querySelector('button').onclick = () => runBypass([u]);
       $('homeRes').appendChild(e2);
-      stepsDone(false);
+      stepsDone(false, serverResponded);
     }
   }
-  stepsDone(!hadError);
+  stepsDone(!hadError, serverResponded);
 }
 $('go').onclick = () => { const v = $('url').value.trim(); if (v) runBypass([v]); };
 $('goBatch').onclick = () => {

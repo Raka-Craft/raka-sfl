@@ -488,8 +488,9 @@ async function aggressiveRetry(resolveFn, maxAttempts, deadline) {
  return result;
  }
  lastError = result;
- // Jangan retry kalau butuh manual (Cloudflare)
- if (result && result.needManual) return result;
+ // Jangan retry kalau butuh manual (Cloudflare) atau linknya sudah mati
+ // (hasilnya deterministik -- retry cuma buang waktu server).
+ if (result && (result.needManual || result.deadLink)) return result;
  } catch (e) {
  lastError = { ok: false, error: e.message };
  }
@@ -986,11 +987,17 @@ function safelinkuToken(jar) {
 async function safelinkuPost(url, body, referer, jar, deadline) {
  if (Date.now() > deadline - 1000) return null;
  try {
- const r = await fetchT(url, {
- method: 'POST', redirect: 'manual',
- headers: { ...baseHeaders(jar), 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'Referer': referer },
- body: JSON.stringify(body),
- }, 6000);
+ const hdrs = () => ({ ...baseHeaders(jar), 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'Referer': referer });
+ let r = await fetchT(url, { method: 'POST', redirect: 'manual', headers: hdrs(), body: JSON.stringify(body) }, 6000);
+ // Aturan 419 (terbukti dari walker + mesin HP): panggilan API SFL pertama
+ // SELALU 419 "Page expired" dari IP tertentu -- ulangi LANGSUNG tanpa delay
+ // dengan token yang sama -> 200. Mesin HP dan walker sudah begitu; server
+ // ketinggalan ini, makanya flow SFL gagal total dari IP yang kena 419.
+ if (r.status === 419) {
+ try { await r.arrayBuffer().catch(() => {}); } catch (e) {}
+ storeCookies(jar, r.headers);
+ r = await fetchT(url, { method: 'POST', redirect: 'manual', headers: hdrs(), body: JSON.stringify(body) }, 6000);
+ }
  storeCookies(jar, r.headers);
  const j = await r.json().catch(() => null);
  try { await r.arrayBuffer().catch(() => {}); } catch (e) {}
@@ -1313,10 +1320,13 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  return { ok: true, provider: provider.name, destination: dest, chain: first.chain, ms: Date.now() - t0, method: 'redirect' };
  }
  // Dest masih shortener terkenal -> resolve berantai, jangan klaim sukses palsu.
- if (destProv.fn !== 'manual' && Date.now() < deadline - 8000) {
+ if (destProv.fn !== 'manual' && Date.now() < deadline - 4000) {
  const sub = await resolveUrl(dest, deadline, false);
  if (sub && sub.ok && sub.destination) {
  return { ok: true, provider: provider.name + ' → ' + sub.provider, destination: sub.destination, chain: [...first.chain, ...sub.chain.slice(1)], ms: Date.now() - t0, method: 'redirect+recursive' };
+ }
+ if (sub && sub.deadLink) {
+ return { ok: false, deadLink: true, provider: provider.name + ' → ' + sub.provider, error: sub.error, chain: [...first.chain, ...sub.chain.slice(1)], ms: Date.now() - t0 };
  }
  }
  // Sub gagal / manual -> lanjut ke flow provider di bawah dengan halaman dest.
@@ -1382,6 +1392,19 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  chain, ms: Date.now() - t0 };
  }
  if (provider.fn === 'subunlock') {
+ // Link mati: slug yang tidak dikenal platform di-redirect ke /set lalu ke
+ // beranda (terbukti: sub2unlock.id/AC90ne -> /set -> /). Halaman link yang
+ // hidup SELALU mempertahankan path slug-nya -- jadi kalau halaman akhirnya
+ // beranda atau /set, linknya sudah dihapus/kedaluwarsa. Laporkan jujur,
+ // jangan needManual -- mesin HP juga tidak bisa membangkitkan link mati.
+ try {
+ const pu = new URL(pageUrl);
+ if (pu.pathname === '/' || pu.pathname === '/set') {
+ return { ok: false, deadLink: true, provider: provider.name,
+ error: 'Link SubUnlock-nya sudah tidak aktif -- pembuatnya menghapusnya atau masa berlakunya habis.',
+ chain, ms: Date.now() - t0 };
+ }
+ } catch (e) {}
  // sub4unlock.com diblokir Cloudflare dari IP server: ambil lewat Google
  // Translate (IP Google dipercaya CF) -- pola yang sama seperti flowSafelinku.
  if (!html || html.includes('Just a moment...') || html.includes('challenges.cloudflare.com')) {
@@ -1417,6 +1440,10 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  }
  // Lanjutan butuh mesin (mis. SFL yang diblokir CF dari server): teruskan
  // ke mesin, jangan kembalikan link perantara sebagai "sukses".
+ if (sub && sub.deadLink) {
+ return { ok: false, deadLink: true, provider: provider.name + ' → ' + sub.provider,
+ error: sub.error, chain: [...chain, dest0, ...(sub.chain || []).slice(1)], ms: Date.now() - t0 };
+ }
  if (sub && sub.needManual) {
  return { ok: false, needManual: true, provider: provider.name + ' → ' + sub.provider,
  manualUrl: sub.manualUrl || dest0, reason: sub.reason,
@@ -1483,6 +1510,10 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  return { ok: true, provider: provider.name + ' → ' + sub.provider,
  destination: sub.destination, chain: [...chain, dest, ...sub.chain.slice(1)],
  ms: Date.now() - t0, method: 'subunlock-final+recursive' };
+ }
+ if (sub && sub.deadLink) {
+ return { ok: false, deadLink: true, provider: provider.name + ' → ' + sub.provider,
+ error: sub.error, chain: [...chain, dest, ...(sub.chain || []).slice(1)], ms: Date.now() - t0 };
  }
  if (sub && sub.needManual) {
  return { ok: false, needManual: true, provider: provider.name + ' → ' + sub.provider,
@@ -1552,6 +1583,10 @@ async function resolveUrl(raw, deadline, isManualContinue) {
  return { ok: true, provider: provider.name + ' → ' + sub.provider,
  destination: sub.destination, chain: [...chain, lpUrl, dest, ...sub.chain.slice(1)],
  ms: Date.now() - t0, method: 'subunlock-lp+recursive' };
+ }
+ if (sub && sub.deadLink) {
+ return { ok: false, deadLink: true, provider: provider.name + ' → ' + sub.provider,
+ error: sub.error, chain: [...chain, lpUrl, dest, ...(sub.chain || []).slice(1)], ms: Date.now() - t0 };
  }
  if (sub && sub.needManual) {
  return { ok: false, needManual: true, provider: provider.name + ' → ' + sub.provider,
@@ -1717,11 +1752,16 @@ module.exports = async (req, res) => {
  const dh = hostOf(out.destination);
  const sp = detectProvider(dh);
  if (!sp || sp.fn === 'manual' || sp.name === 'Otomatis') break;
- if (Date.now() > deadline - 8000) {
+ if (Date.now() > deadline - 4000) {
  // Rantai masih berlanjut tapi waktu server hampir habis: serahkan ke mesin HP.
  return res.status(200).json({ ok: false, needManual: true, provider: out.provider, manualUrl: out.destination, reason: 'Rantai linknya panjang dan waktu server hampir habis -- mesin akan melanjutkan dari HP-mu.', chain: out.chain });
  }
  const sub = await resolveUrl(out.destination, deadline, false);
+ if (sub && sub.deadLink) {
+ // Link lanjutannya mati (mis. SFL -> SubUnlock yang sudah dihapus):
+ // laporkan jujur, jangan needManual -- mesin juga tidak bisa.
+ return res.status(200).json({ ok: false, provider: sub.provider, error: sub.error, chain: [...(out.chain || []), ...(sub.chain || []).slice(1)] });
+ }
  if (sub && sub.needManual) {
  // Rantai mentok di halaman yang butuh aksi manusia (mis. Subscribe to Unlock):
  // teruskan needManual-nya, jangan mengembalikan halaman perantara sebagai sukses.
